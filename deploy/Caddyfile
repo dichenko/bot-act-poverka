@@ -1,0 +1,18 @@
+﻿{
+  email {$LETSENCRYPT_EMAIL}
+}
+
+{$BOT_DOMAIN} {
+  reverse_proxy bot:3000
+}
+
+{$PGADMIN_DOMAIN} {
+  reverse_proxy pgadmin:5050
+}
+
+{$DB_DOMAIN} {
+  reverse_proxy bot:3000 {
+    header_up Host {host}
+  }
+}
+
