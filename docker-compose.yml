@@ -3,6 +3,8 @@
     build: .
     container_name: max-act-bot
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3004:3000"
     env_file:
       - .env
     depends_on:
@@ -35,6 +37,8 @@
     image: dpage/pgadmin4:9
     container_name: max-act-pgadmin
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5052:5050"
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
@@ -47,25 +51,6 @@
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
-  caddy:
-    image: caddy:2.8-alpine
-    container_name: max-act-caddy
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - bot
-      - pgadmin
-    networks:
-      - app-net
-
 networks:
   app-net:
     driver: bridge
@@ -73,6 +58,4 @@ networks:
 volumes:
   postgres_data:
   pgadmin_data:
-  caddy_data:
-  caddy_config:
 
