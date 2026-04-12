@@ -13,7 +13,7 @@ export class PdfService {
     user: BotUser;
     draft: ActDraft;
     validUntil: string;
-    priceKopecks: number;
+    priceRub: number;
     actNumber: string;
   }): Promise<string> {
     await ensureDir(env.ACT_STORAGE_DIR);
@@ -51,7 +51,7 @@ export class PdfService {
       doc.text(`Inspection interval: ${input.draft.intervalYears} years`);
       doc.text(`Valid until: ${input.validUntil}`);
       doc.text(`Result: ${boolResultToText(input.draft.result)}`);
-      doc.text(`Price paid: ${(input.priceKopecks / 100).toFixed(2)} RUB`);
+      doc.text(`Price paid: ${input.priceRub} RUB`);
 
       doc.moveDown(2);
       doc.text('This document is generated automatically by MAX bot.', { align: 'left' });

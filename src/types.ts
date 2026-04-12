@@ -26,7 +26,7 @@ export type BotUser = {
   verified: boolean;
   acceptedOfferVersion: string | null;
   acceptedOfferAt: Date | null;
-  balanceKopecks: number;
+  balanceRub: number;
   actsCount: number;
 };
 
@@ -42,7 +42,7 @@ export type PaymentRecord = {
   userId: number;
   kind: 'top_up' | 'one_time' | 'refund' | 'balance_charge';
   status: 'pending' | 'succeeded' | 'failed' | 'refunded';
-  amountKopecks: number;
+  amountRub: number;
   providerPaymentId: string | null;
   confirmationUrl: string | null;
   metadata: Record<string, unknown>;

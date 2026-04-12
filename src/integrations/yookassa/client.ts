@@ -46,11 +46,11 @@ const request = async <T>(path: string, method: 'POST', body: unknown): Promise<
 
 export class YooKassaClient {
   async createPayment(params: {
-    amountKopecks: number;
+    amountRub: number;
     description: string;
     metadata: Record<string, string>;
   }): Promise<YooPayment> {
-    const value = (params.amountKopecks / 100).toFixed(2);
+    const value = params.amountRub.toFixed(2);
     const payload = {
       amount: {
         value,
@@ -80,13 +80,13 @@ export class YooKassaClient {
 
   async refundPayment(params: {
     providerPaymentId: string;
-    amountKopecks: number;
+    amountRub: number;
     reason: string;
   }): Promise<{ id: string; status: string }> {
     const payload = {
       payment_id: params.providerPaymentId,
       amount: {
-        value: (params.amountKopecks / 100).toFixed(2),
+        value: params.amountRub.toFixed(2),
         currency: 'RUB',
       },
       description: params.reason,

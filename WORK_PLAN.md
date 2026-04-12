@@ -21,7 +21,7 @@
 - [x] Add users table
 - [x] Add acts table
 - [x] Add payments table
-- [x] Add settings table
+- [x] Add prices table
 - [x] Add offer versions storage
 - [x] Add fields `user_fullname` and `org_name`
 

@@ -13,14 +13,15 @@ const envSchema = z.object({
   WEBHOOK_PATH: z.string().default('/webhooks/max'),
   WEBHOOK_SECRET: z.string().min(8),
 
-  DATABASE_URL: z.string().min(1),
+  DATABASE_URL: z.string().optional(),
+  POSTGRES_HOST: z.string().default('postgres'),
+  POSTGRES_PORT: z.coerce.number().int().positive().default(5432),
+  POSTGRES_DB: z.string().min(1),
+  POSTGRES_USER: z.string().min(1),
+  POSTGRES_PASSWORD: z.string().min(1),
   EXTERNAL_DATABASE_URL: z.string().min(1),
 
   ADMIN_MAX_IDS: z.string().default(''),
-  HELP_CONTACT: z.string().default('Свяжитесь с администратором: @admin'),
-
-  ACT_PRICE_DEFAULT_KOPECKS: z.coerce.number().int().nonnegative().default(10000),
-  ACT_PRICE_VERIFIED_KOPECKS: z.coerce.number().int().nonnegative().default(0),
 
   ACT_STORAGE_DIR: z.string().default(path.resolve(process.cwd(), 'storage/acts')),
   OFFER_STORAGE_DIR: z.string().default(path.resolve(process.cwd(), 'storage/offers')),
@@ -43,6 +44,10 @@ if (!parsed.success) {
 
 const values = parsed.data;
 
+const databaseUrl =
+  values.DATABASE_URL ??
+  `postgres://${encodeURIComponent(values.POSTGRES_USER)}:${encodeURIComponent(values.POSTGRES_PASSWORD)}@${values.POSTGRES_HOST}:${values.POSTGRES_PORT}/${values.POSTGRES_DB}`;
+
 const adminIds = new Set(
   values.ADMIN_MAX_IDS.split(',')
     .map((item) => item.trim())
@@ -53,6 +58,7 @@ const adminIds = new Set(
 
 export const env = {
   ...values,
+  DATABASE_URL: databaseUrl,
   ADMIN_IDS: adminIds,
 };
 

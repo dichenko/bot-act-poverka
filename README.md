@@ -26,9 +26,9 @@ To keep webhook mode as required, this project receives webhook updates over HTT
 - Manual act creation FSM with validation and cancel on every step
 - Deep-link / submission import from external DB with strict ownership check
 - Permanent verified flag after first valid import
-- Dynamic prices:
-  - `act_price_default`
-  - `act_price_verified`
+- Dynamic prices from DB table `prices`:
+  - `ordinary` (default `40` RUB)
+  - `verified` (default `0` RUB)
 - Payment scenarios:
   - free generation when price is `0`
   - balance charge when funds are enough
@@ -39,8 +39,8 @@ To keep webhook mode as required, this project receives webhook updates over HTT
 - Admin commands:
   - `/start`
   - `/stats`
-  - `/setprice {kopecks}`
-  - `/setprice_verified {kopecks}`
+  - `/setprice {rub}`
+  - `/setprice_verified {rub}`
   - `/user {id}`
   - `/refund {payment_id}`
   - `/addbalance {user_id} {amount}`
@@ -73,7 +73,11 @@ cp .env.example .env
 2. Fill required values in `.env`:
 - `BOT_TOKEN`
 - `WEBHOOK_SECRET`
-- `DATABASE_URL`
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
 - `EXTERNAL_DATABASE_URL`
 - `YOOKASSA_SHOP_ID`
 - `YOOKASSA_SECRET_KEY`
@@ -107,7 +111,6 @@ Services:
 - `bot` (internal port `3000`)
 - `postgres` (private internal network)
 - `pgadmin` (proxied through HTTPS subdomain)
-- `caddy` (TLS termination + reverse proxy)
 
 ## Security notes
 

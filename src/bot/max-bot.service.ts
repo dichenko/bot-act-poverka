@@ -20,14 +20,17 @@ const ADMIN_HELP_TEXT = [
   'Доступные команды:',
   '/start - показать эту справку',
   '/stats - статистика (день/месяц/всего)',
-  '/setprice {kopecks} - цена для обычных пользователей',
-  '/setprice_verified {kopecks} - цена для verified-пользователей',
+  '/setprice {rub} - цена для обычных пользователей',
+  '/setprice_verified {rub} - цена для verified-пользователей',
   '/user {max_user_id} - карточка пользователя',
   '/refund {payment_id} - возврат через YooKassa',
-  '/addbalance {max_user_id} {amount_kopecks} - пополнение баланса вручную',
+  '/addbalance {max_user_id} {amount_rub} - пополнение баланса вручную',
   '/broadcast {text} - рассылка текста всем пользователям',
   '/new_oferta - загрузка новой оферты и запуск переакцепта',
 ].join('\n');
+
+const HELP_CONTACT_HTML_PLACEHOLDER =
+  '<b>HELP_PLACEHOLDER</b>\n<i>Здесь будет HTML-текст с контактами администратора.</i>';
 
 type IncomingIdentity = {
   maxUserId: number;
@@ -62,7 +65,7 @@ export class MaxBotService {
   }
 
   async init(): Promise<void> {
-    await repository.ensureSettings(env.ACT_PRICE_DEFAULT_KOPECKS, env.ACT_PRICE_VERIFIED_KOPECKS);
+    await repository.ensurePrices();
 
     await this.bot.api.setMyCommands([
       { name: 'start', description: 'Open main menu' },
@@ -97,12 +100,12 @@ export class MaxBotService {
       });
 
       if (payment.kind === 'top_up') {
-        await repository.changeBalance(payment.userId, payment.amountKopecks);
+        await repository.changeBalance(payment.userId, payment.amountRub);
         const user = await repository.getUserById(payment.userId);
         if (user) {
           await this.bot.api.sendMessageToUser(
             user.maxUserId,
-            `Payment succeeded. Balance topped up by ${formatRub(payment.amountKopecks)}.`,
+            `Payment succeeded. Balance topped up by ${formatRub(payment.amountRub)}.`,
           );
         }
       }
@@ -133,7 +136,7 @@ export class MaxBotService {
         const act = await actService.createAndStoreAct({
           user,
           draft,
-          priceKopecks: pendingAct.priceKopecks,
+          priceRub: pendingAct.priceRub,
           paymentId: payment.id,
         });
 
@@ -267,7 +270,7 @@ export class MaxBotService {
     }
 
     if (command?.command === '/help') {
-      await this.bot.api.sendMessageToUser(user.maxUserId, env.HELP_CONTACT);
+      await this.sendHelpContact(user.maxUserId);
       return;
     }
 
@@ -425,13 +428,19 @@ export class MaxBotService {
     const price = user.verified ? prices.verifiedPrice : prices.defaultPrice;
 
     const text = [
-      `Balance: ${formatRub(user.balanceKopecks)}`,
+      `Balance: ${formatRub(user.balanceRub)}`,
       `Total acts created: ${user.actsCount}`,
       `Current user price: ${formatRub(price)}`,
     ].join('\n');
 
     await this.bot.api.sendMessageToUser(maxUserId, text, {
       attachments: [menuKeyboard(user.verified)],
+    });
+  }
+
+  private async sendHelpContact(maxUserId: number): Promise<void> {
+    await this.bot.api.sendMessageToUser(maxUserId, HELP_CONTACT_HTML_PLACEHOLDER, {
+      format: 'html',
     });
   }
 
@@ -603,17 +612,17 @@ export class MaxBotService {
       }
 
       case 'topup_custom_amount': {
-        const normalized = text.replace(',', '.').trim();
+        const normalized = text.trim();
         const valueRub = Number(normalized);
-        if (!Number.isFinite(valueRub) || valueRub < 10) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Minimum top-up amount is 10 ?.', {
+        if (!/^\d+$/.test(normalized) || !Number.isInteger(valueRub) || valueRub < 10) {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Minimum top-up amount is 10 ₽ (whole rubles only).', {
             attachments: [cancelKeyboard()],
           });
           return;
         }
 
-        const amountKopecks = Math.round(valueRub * 100);
-        await this.createTopUpPayment(user, amountKopecks);
+        const amountRub = valueRub;
+        await this.createTopUpPayment(user, amountRub);
 
         const resumeState = String(session.data.resumeState ?? 'idle') as UserSession['state'];
         const resumeData = (session.data.resumeData as Record<string, unknown>) ?? {};
@@ -627,7 +636,7 @@ export class MaxBotService {
   }
   private async handleCallbackByPayload(user: BotUser, payload: string, session: UserSession): Promise<void> {
     if (payload === CB.MENU_HELP) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, env.HELP_CONTACT);
+      await this.sendHelpContact(user.maxUserId);
       return;
     }
 
@@ -827,7 +836,7 @@ export class MaxBotService {
       const act = await actService.createAndStoreAct({
         user,
         draft,
-        priceKopecks: 0,
+        priceRub: 0,
       });
 
       await repository.clearSession(user.id);
@@ -842,13 +851,13 @@ export class MaxBotService {
       return;
     }
 
-    if (freshUser.balanceKopecks >= price) {
+    if (freshUser.balanceRub >= price) {
       await repository.changeBalance(user.id, -price);
       const payment = await repository.createPayment({
         userId: user.id,
         kind: 'balance_charge',
         status: 'succeeded',
-        amountKopecks: price,
+        amountRub: price,
         metadata: {
           reason: 'act_generation',
         },
@@ -858,7 +867,7 @@ export class MaxBotService {
         const act = await actService.createAndStoreAct({
           user,
           draft,
-          priceKopecks: price,
+          priceRub: price,
           paymentId: payment.id,
         });
 
@@ -904,7 +913,7 @@ export class MaxBotService {
       userId: user.id,
       source: draftRaw.source,
       draft: draftRaw,
-      priceKopecks: price,
+      priceRub: price,
       status: 'pending',
     });
 
@@ -912,14 +921,14 @@ export class MaxBotService {
       userId: user.id,
       kind: 'one_time',
       status: 'pending',
-      amountKopecks: price,
+      amountRub: price,
       metadata: {
         pending_act_id: pending.id,
       },
     });
 
     const yooPayment = await yooKassaClient.createPayment({
-      amountKopecks: price,
+      amountRub: price,
       description: `One-time act payment for user ${user.maxUserId}`,
       metadata: {
         payment_kind: 'one_time',
@@ -951,20 +960,20 @@ export class MaxBotService {
       attachments: [
         makeKeyboard([
           [
-            { text: '10 ?', payload: CB.TOPUP_10 },
-            { text: '50 ?', payload: CB.TOPUP_50 },
-            { text: '100 ?', payload: CB.TOPUP_100 },
+            { text: '10 ₽', payload: CB.TOPUP_10 },
+            { text: '50 ₽', payload: CB.TOPUP_50 },
+            { text: '100 ₽', payload: CB.TOPUP_100 },
           ],
           [{ text: 'Other amount', payload: CB.TOPUP_OTHER }],
-          [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+          [{ text: 'Cancel', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
     });
   }
 
-  private async createTopUpPayment(user: BotUser, amountKopecks: number): Promise<void> {
-    if (amountKopecks < 1000) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Minimum top-up amount is 10 ?.');
+  private async createTopUpPayment(user: BotUser, amountRub: number): Promise<void> {
+    if (!Number.isInteger(amountRub) || amountRub < 10) {
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Minimum top-up amount is 10 ₽ (whole rubles only).');
       return;
     }
 
@@ -972,11 +981,11 @@ export class MaxBotService {
       userId: user.id,
       kind: 'top_up',
       status: 'pending',
-      amountKopecks,
+      amountRub,
     });
 
     const yooPayment = await yooKassaClient.createPayment({
-      amountKopecks,
+      amountRub,
       description: `Balance top-up for user ${user.maxUserId}`,
       metadata: {
         payment_kind: 'top_up',
@@ -1158,24 +1167,24 @@ export class MaxBotService {
 
       case '/setprice': {
         const value = Number(command.args[0]);
-        if (!Number.isFinite(value) || value < 0) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /setprice {kopecks}');
+        if (!Number.isInteger(value) || value < 0) {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /setprice {rub}');
           return;
         }
 
-        await repository.setSetting('act_price_default', String(Math.floor(value)));
+        await repository.setPrice('ordinary', value);
         await this.bot.api.sendMessageToUser(user.maxUserId, 'Default price updated successfully.');
         return;
       }
 
       case '/setprice_verified': {
         const value = Number(command.args[0]);
-        if (!Number.isFinite(value) || value < 0) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /setprice_verified {kopecks}');
+        if (!Number.isInteger(value) || value < 0) {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /setprice_verified {rub}');
           return;
         }
 
-        await repository.setSetting('act_price_verified', String(Math.floor(value)));
+        await repository.setPrice('verified', value);
         await this.bot.api.sendMessageToUser(user.maxUserId, 'Verified-user price updated successfully.');
         return;
       }
@@ -1197,7 +1206,7 @@ export class MaxBotService {
           user.maxUserId,
           [
             `User MAX ID: ${card.user.maxUserId}`,
-            `Balance: ${formatRub(card.user.balanceKopecks)}`,
+            `Balance: ${formatRub(card.user.balanceRub)}`,
             `Acts: ${card.user.actsCount}`,
             `Payments: ${card.paymentsCount}`,
             `User type: ${card.user.verified ? 'verified' : 'ordinary'}`,
@@ -1209,7 +1218,7 @@ export class MaxBotService {
       case '/addbalance': {
         const targetMaxId = Number(command.args[0]);
         const amount = Number(command.args[1]);
-        if (!Number.isFinite(targetMaxId) || !Number.isFinite(amount)) {
+        if (!Number.isFinite(targetMaxId) || !Number.isInteger(amount) || amount <= 0) {
           await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /addbalance {user_id} {amount}');
           return;
         }
@@ -1220,12 +1229,9 @@ export class MaxBotService {
           return;
         }
 
-        await repository.changeBalance(target.id, Math.floor(amount));
+        await repository.changeBalance(target.id, amount);
         await this.bot.api.sendMessageToUser(user.maxUserId, 'Balance updated successfully.');
-        await this.bot.api.sendMessageToUser(
-          target.maxUserId,
-          `Your balance was changed by admin: ${formatRub(Math.floor(amount))}`,
-        );
+        await this.bot.api.sendMessageToUser(target.maxUserId, `Your balance was changed by admin: ${formatRub(amount)}`);
         return;
       }
 
@@ -1276,7 +1282,7 @@ export class MaxBotService {
 
         const refund = await yooKassaClient.refundPayment({
           providerPaymentId: payment.providerPaymentId,
-          amountKopecks: payment.amountKopecks,
+          amountRub: payment.amountRub,
           reason: `Admin refund for payment ${payment.id}`,
         });
 
@@ -1403,4 +1409,5 @@ export class MaxBotService {
 }
 
 export const maxBotService = new MaxBotService();
+
 

@@ -34,7 +34,7 @@ export class ActService {
   async createAndStoreAct(input: {
     user: BotUser;
     draft: ActDraft;
-    priceKopecks: number;
+    priceRub: number;
     paymentId?: number | null;
   }): Promise<{ actId: number; pdfPath: string; actNumber: string; validUntil: string }> {
     const checkDate = parseDateOrNull(input.draft.checkDate);
@@ -50,7 +50,7 @@ export class ActService {
       user: input.user,
       draft: input.draft,
       validUntil: format(validUntil, 'dd.MM.yyyy'),
-      priceKopecks: input.priceKopecks,
+      priceRub: input.priceRub,
       actNumber,
     });
 
@@ -62,7 +62,7 @@ export class ActService {
         draft: input.draft,
         actNumber,
         validUntil: validUntilStr,
-        priceKopecks: input.priceKopecks,
+        priceRub: input.priceRub,
         paymentId: input.paymentId ?? null,
         pdfPath,
         db: client,

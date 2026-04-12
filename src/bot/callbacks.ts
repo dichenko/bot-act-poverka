@@ -25,9 +25,9 @@
   INSUFFICIENT_ONE_TIME: 'insufficient_one_time',
   INSUFFICIENT_TOPUP: 'insufficient_topup',
 
-  TOPUP_10: 'topup_1000',
-  TOPUP_50: 'topup_5000',
-  TOPUP_100: 'topup_10000',
+  TOPUP_10: 'topup_10',
+  TOPUP_50: 'topup_50',
+  TOPUP_100: 'topup_100',
   TOPUP_OTHER: 'topup_other',
 
   IMPORT_CONFIRM: 'import_confirm',

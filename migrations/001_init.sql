@@ -9,15 +9,16 @@
   verified BOOLEAN NOT NULL DEFAULT FALSE,
   accepted_offer_version TEXT,
   accepted_offer_at TIMESTAMPTZ,
-  balance_kopecks INTEGER NOT NULL DEFAULT 0,
+  balance_rub INTEGER NOT NULL DEFAULT 0,
   acts_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS prices (
+  id BIGSERIAL PRIMARY KEY,
+  user_type TEXT NOT NULL UNIQUE CHECK (user_type IN ('ordinary', 'verified')),
+  price_rub INTEGER NOT NULL CHECK (price_rub >= 0),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS payments (
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   kind TEXT NOT NULL CHECK (kind IN ('top_up', 'one_time', 'refund', 'balance_charge')),
   status TEXT NOT NULL CHECK (status IN ('pending', 'succeeded', 'failed', 'refunded')),
-  amount_kopecks INTEGER NOT NULL CHECK (amount_kopecks >= 0),
+  amount_rub INTEGER NOT NULL CHECK (amount_rub >= 0),
   currency TEXT NOT NULL DEFAULT 'RUB',
   provider TEXT NOT NULL DEFAULT 'yookassa',
   provider_payment_id TEXT UNIQUE,
@@ -57,7 +58,7 @@ CREATE TABLE IF NOT EXISTS pending_acts (
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   source TEXT NOT NULL CHECK (source IN ('manual', 'submission')),
   draft JSONB NOT NULL,
-  price_kopecks INTEGER NOT NULL,
+  price_rub INTEGER NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('pending', 'paid', 'cancelled', 'completed')),
   payment_id BIGINT REFERENCES payments(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -79,7 +80,7 @@ CREATE TABLE IF NOT EXISTS acts (
   interval_years INTEGER NOT NULL CHECK (interval_years IN (4, 5, 6)),
   valid_until DATE NOT NULL,
   result TEXT NOT NULL CHECK (result IN ('fit', 'unfit')),
-  price_kopecks INTEGER NOT NULL,
+  price_rub INTEGER NOT NULL,
   payment_id BIGINT REFERENCES payments(id) ON DELETE SET NULL,
   pdf_path TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -91,9 +92,8 @@ CREATE INDEX IF NOT EXISTS idx_acts_created_at ON acts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_provider_payment_id ON payments(provider_payment_id);
 
-INSERT INTO settings(key, value)
+INSERT INTO prices(user_type, price_rub)
 VALUES
-  ('act_price_default', '10000'),
-  ('act_price_verified', '0')
-ON CONFLICT (key) DO NOTHING;
-
+  ('ordinary', 40),
+  ('verified', 0)
+ON CONFLICT (user_type) DO NOTHING;

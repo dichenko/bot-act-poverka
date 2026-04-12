@@ -4,6 +4,8 @@ import type { ActDraft, BotUser, CurrentOffer, PaymentRecord, UserSession } from
 
 type DB = PoolClient | typeof pool;
 
+type PriceUserType = 'ordinary' | 'verified';
+
 const toBotUser = (row: QueryResultRow): BotUser => ({
   id: Number(row.id),
   maxUserId: Number(row.max_user_id),
@@ -15,7 +17,7 @@ const toBotUser = (row: QueryResultRow): BotUser => ({
   verified: row.verified,
   acceptedOfferVersion: row.accepted_offer_version,
   acceptedOfferAt: row.accepted_offer_at,
-  balanceKopecks: Number(row.balance_kopecks),
+  balanceRub: Number(row.balance_rub),
   actsCount: Number(row.acts_count),
 });
 
@@ -24,52 +26,48 @@ const toPaymentRecord = (row: QueryResultRow): PaymentRecord => ({
   userId: Number(row.user_id),
   kind: row.kind,
   status: row.status,
-  amountKopecks: Number(row.amount_kopecks),
+  amountRub: Number(row.amount_rub),
   providerPaymentId: row.provider_payment_id,
   confirmationUrl: row.confirmation_url,
   metadata: row.metadata ?? {},
 });
 
 export class Repository {
-  async ensureSettings(defaultPrice: number, verifiedPrice: number): Promise<void> {
+  async ensurePrices(): Promise<void> {
     await pool.query(
       `
-      INSERT INTO settings(key, value)
+      INSERT INTO prices(user_type, price_rub)
       VALUES
-        ('act_price_default', $1),
-        ('act_price_verified', $2)
-      ON CONFLICT (key) DO NOTHING
+        ('ordinary', 40),
+        ('verified', 0)
+      ON CONFLICT (user_type) DO NOTHING
       `,
-      [String(defaultPrice), String(verifiedPrice)],
-    );
-  }
-
-  async getSetting(key: string): Promise<string | null> {
-    const { rows } = await pool.query<{ value: string }>('SELECT value FROM settings WHERE key = $1', [key]);
-    return rows[0]?.value ?? null;
-  }
-
-  async setSetting(key: string, value: string): Promise<void> {
-    await pool.query(
-      `
-      INSERT INTO settings(key, value, updated_at)
-      VALUES ($1, $2, NOW())
-      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-      `,
-      [key, value],
     );
   }
 
   async getPrices(): Promise<{ defaultPrice: number; verifiedPrice: number }> {
-    const [defaultRaw, verifiedRaw] = await Promise.all([
-      this.getSetting('act_price_default'),
-      this.getSetting('act_price_verified'),
-    ]);
+    const { rows } = await pool.query<{ user_type: PriceUserType; price_rub: number }>(
+      'SELECT user_type, price_rub FROM prices WHERE user_type IN ($1, $2)',
+      ['ordinary', 'verified'],
+    );
 
+    const map = new Map(rows.map((row) => [row.user_type, Number(row.price_rub)]));
     return {
-      defaultPrice: Number(defaultRaw ?? '0'),
-      verifiedPrice: Number(verifiedRaw ?? '0'),
+      defaultPrice: map.get('ordinary') ?? 40,
+      verifiedPrice: map.get('verified') ?? 0,
     };
+  }
+
+  async setPrice(userType: PriceUserType, priceRub: number): Promise<void> {
+    await pool.query(
+      `
+      INSERT INTO prices(user_type, price_rub, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (user_type) DO UPDATE
+      SET price_rub = EXCLUDED.price_rub, updated_at = NOW()
+      `,
+      [userType, priceRub],
+    );
   }
 
   async upsertUserByMaxId(input: {
@@ -135,15 +133,15 @@ export class Repository {
     );
   }
 
-  async changeBalance(userId: number, deltaKopecks: number, db: DB = pool): Promise<void> {
+  async changeBalance(userId: number, deltaRub: number, db: DB = pool): Promise<void> {
     await db.query(
       `
       UPDATE users
-      SET balance_kopecks = balance_kopecks + $2,
+      SET balance_rub = balance_rub + $2,
           updated_at = NOW()
       WHERE id = $1
       `,
-      [userId, deltaKopecks],
+      [userId, deltaRub],
     );
   }
 
@@ -237,7 +235,7 @@ export class Repository {
     userId: number;
     kind: PaymentRecord['kind'];
     status: PaymentRecord['status'];
-    amountKopecks: number;
+    amountRub: number;
     providerPaymentId?: string | null;
     confirmationUrl?: string | null;
     metadata?: Record<string, unknown>;
@@ -246,7 +244,7 @@ export class Repository {
     const db = input.db ?? pool;
     const { rows } = await db.query(
       `
-      INSERT INTO payments(user_id, kind, status, amount_kopecks, provider_payment_id, confirmation_url, metadata, updated_at)
+      INSERT INTO payments(user_id, kind, status, amount_rub, provider_payment_id, confirmation_url, metadata, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
       RETURNING *
       `,
@@ -254,7 +252,7 @@ export class Repository {
         input.userId,
         input.kind,
         input.status,
-        input.amountKopecks,
+        input.amountRub,
         input.providerPaymentId ?? null,
         input.confirmationUrl ?? null,
         JSON.stringify(input.metadata ?? {}),
@@ -343,7 +341,7 @@ export class Repository {
     userId: number;
     source: 'manual' | 'submission';
     draft: ActDraft;
-    priceKopecks: number;
+    priceRub: number;
     status: 'pending' | 'paid' | 'cancelled' | 'completed';
     paymentId?: number | null;
     db?: DB;
@@ -351,11 +349,11 @@ export class Repository {
     const db = input.db ?? pool;
     const { rows } = await db.query(
       `
-      INSERT INTO pending_acts(user_id, source, draft, price_kopecks, status, payment_id, updated_at)
+      INSERT INTO pending_acts(user_id, source, draft, price_rub, status, payment_id, updated_at)
       VALUES ($1, $2, $3::jsonb, $4, $5, $6, NOW())
       RETURNING id
       `,
-      [input.userId, input.source, JSON.stringify(input.draft), input.priceKopecks, input.status, input.paymentId ?? null],
+      [input.userId, input.source, JSON.stringify(input.draft), input.priceRub, input.status, input.paymentId ?? null],
     );
 
     return { id: Number(rows[0].id) };
@@ -366,7 +364,7 @@ export class Repository {
     userId: number;
     source: 'manual' | 'submission';
     draft: ActDraft;
-    priceKopecks: number;
+    priceRub: number;
     status: 'pending' | 'paid' | 'cancelled' | 'completed';
     paymentId: number | null;
   } | null> {
@@ -380,7 +378,7 @@ export class Repository {
       userId: Number(rows[0].user_id),
       source: rows[0].source,
       draft: rows[0].draft,
-      priceKopecks: Number(rows[0].price_kopecks),
+      priceRub: Number(rows[0].price_rub),
       status: rows[0].status,
       paymentId: rows[0].payment_id ? Number(rows[0].payment_id) : null,
     };
@@ -401,7 +399,7 @@ export class Repository {
     draft: ActDraft;
     actNumber: string;
     validUntil: string;
-    priceKopecks: number;
+    priceRub: number;
     paymentId?: number | null;
     pdfPath: string;
     db?: DB;
@@ -424,7 +422,7 @@ export class Repository {
         interval_years,
         valid_until,
         result,
-        price_kopecks,
+        price_rub,
         payment_id,
         pdf_path
       )
@@ -445,7 +443,7 @@ export class Repository {
         draft.intervalYears,
         input.validUntil,
         draft.result,
-        input.priceKopecks,
+        input.priceRub,
         input.paymentId ?? null,
         input.pdfPath,
       ],
@@ -505,16 +503,16 @@ export class Repository {
       pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM users'),
       pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM acts'),
       pool.query<{ sum: string | null }>(
-        `SELECT COALESCE(SUM(price_kopecks), 0)::text AS sum
+        `SELECT COALESCE(SUM(price_rub), 0)::text AS sum
          FROM acts
          WHERE created_at >= date_trunc('day', NOW())`,
       ),
       pool.query<{ sum: string | null }>(
-        `SELECT COALESCE(SUM(price_kopecks), 0)::text AS sum
+        `SELECT COALESCE(SUM(price_rub), 0)::text AS sum
          FROM acts
          WHERE created_at >= date_trunc('month', NOW())`,
       ),
-      pool.query<{ sum: string | null }>('SELECT COALESCE(SUM(price_kopecks), 0)::text AS sum FROM acts'),
+      pool.query<{ sum: string | null }>('SELECT COALESCE(SUM(price_rub), 0)::text AS sum FROM acts'),
     ]);
 
     return {
@@ -544,4 +542,3 @@ export class Repository {
 }
 
 export const repository = new Repository();
-

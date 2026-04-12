@@ -1,5 +1,5 @@
-﻿export const formatRub = (kopecks: number): string => {
-  return `${(kopecks / 100).toFixed(2)} ?`;
+﻿export const formatRub = (rub: number): string => {
+  return `${rub} ₽`;
 };
 
 export const waterTypeToRu = (value: string): 'ХВС' | 'ГВС' | null => {
@@ -14,5 +14,4 @@ export const waterTypeToRu = (value: string): 'ХВС' | 'ГВС' | null => {
 };
 
 export const boolResultToText = (result: 'fit' | 'unfit'): string =>
-  result === 'fit' ? '? Годен' : '? Негоден';
-
+  result === 'fit' ? '✅ Годен' : '❌ Негоден';
