@@ -169,3 +169,16 @@ Supported placeholders inside cells:
 - `{{source}}`
 - `{{submission_id}}`
 
+## One-shot generation test
+
+You can create and process a single test generation request (without sending files to MAX) and verify both files exist:
+
+```bash
+npm run test:act:once
+```
+
+Optional env overrides for test:
+
+- `TEST_MAX_USER_ID` (default: `990000001`)
+- `TEST_PRICE_RUB` (default: `0`)
+

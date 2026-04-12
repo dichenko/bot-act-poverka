@@ -4,10 +4,15 @@ import { logger } from '../logger';
 import { actService, validateDraft } from './act.service';
 import { sendFileToUser } from '../bot/ui';
 
-export class ActGenerationQueueService {
-  constructor(private readonly api: Api) {}
+type ProcessOptions = {
+  notifyUser?: boolean;
+};
 
-  async processNext(): Promise<boolean> {
+export class ActGenerationQueueService {
+  constructor(private readonly api?: Api) {}
+
+  async processNext(options: ProcessOptions = {}): Promise<boolean> {
+    const notifyUser = options.notifyUser ?? true;
     const job = await repository.lockNextQueuedActGenerationJob();
     if (!job) {
       return false;
@@ -40,8 +45,10 @@ export class ActGenerationQueueService {
         await repository.setPendingActStatus(job.pendingActId, 'completed');
       }
 
-      await this.api.sendMessageToUser(user.maxUserId, 'Act created successfully.');
-      await sendFileToUser(this.api, user.maxUserId, act.pdfPath, `Act #${act.actNumber}`);
+      if (notifyUser && this.api) {
+        await this.api.sendMessageToUser(user.maxUserId, 'Act created successfully.');
+        await sendFileToUser(this.api, user.maxUserId, act.pdfPath, `Act #${act.actNumber}`);
+      }
 
       logger.info({ jobId: job.id, actId: act.actId }, 'Act generation job completed');
       return true;
@@ -54,7 +61,7 @@ export class ActGenerationQueueService {
       }
 
       const user = await repository.getUserById(job.userId);
-      if (user) {
+      if (notifyUser && this.api && user) {
         await this.api.sendMessageToUser(
           user.maxUserId,
           'Act generation failed. Administrator has been notified. Please try again later.',

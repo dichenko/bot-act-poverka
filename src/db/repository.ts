@@ -514,6 +514,11 @@ export class Repository {
     );
   }
 
+  async getActGenerationJobById(jobId: number): Promise<ActGenerationJob | null> {
+    const { rows } = await pool.query('SELECT * FROM act_generation_jobs WHERE id = $1 LIMIT 1', [jobId]);
+    return rows[0] ? toActGenerationJob(rows[0]) : null;
+  }
+
   async createAct(input: {
     userId: number;
     source: 'manual' | 'submission';
