@@ -51,7 +51,7 @@
       retries: 5
 
   pgadmin:
-    image: dpage/pgadmin4:9.14.0
+    image: dpage/pgadmin4:9.13
     container_name: max-act-pgadmin
     restart: unless-stopped
     ports:

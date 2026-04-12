@@ -116,7 +116,7 @@ Services:
 - `bot` (internal port `3000`)
 - `worker` (polling queued act-generation jobs)
 - `postgres` (private internal network)
-- `pgadmin` (proxied through HTTPS subdomain)
+- `pgadmin` (proxied through HTTPS subdomain, image tag `dpage/pgadmin4:9.13`)
 
 ## Security notes
 
