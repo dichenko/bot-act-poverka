@@ -82,8 +82,27 @@ CREATE TABLE IF NOT EXISTS acts (
   result TEXT NOT NULL CHECK (result IN ('fit', 'unfit')),
   price_rub INTEGER NOT NULL,
   payment_id BIGINT REFERENCES payments(id) ON DELETE SET NULL,
+  xlsx_path TEXT,
   pdf_path TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS act_generation_jobs (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  pending_act_id BIGINT UNIQUE REFERENCES pending_acts(id) ON DELETE CASCADE,
+  payment_id BIGINT REFERENCES payments(id) ON DELETE SET NULL,
+  status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed', 'cancelled')),
+  draft JSONB NOT NULL,
+  price_rub INTEGER NOT NULL CHECK (price_rub >= 0),
+  xlsx_path TEXT,
+  pdf_path TEXT,
+  error_message TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_max_user_id ON users(max_user_id);
@@ -91,6 +110,8 @@ CREATE INDEX IF NOT EXISTS idx_acts_user_id ON acts(user_id);
 CREATE INDEX IF NOT EXISTS idx_acts_created_at ON acts(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_payments_user_id ON payments(user_id);
 CREATE INDEX IF NOT EXISTS idx_payments_provider_payment_id ON payments(provider_payment_id);
+CREATE INDEX IF NOT EXISTS idx_act_generation_jobs_status_created_at
+  ON act_generation_jobs(status, created_at);
 
 INSERT INTO prices(user_type, price_rub)
 VALUES

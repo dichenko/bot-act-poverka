@@ -4,4 +4,5 @@ dist/
 storage/
 *.log
 coverage/
-
+template/*
+!template/.gitkeep

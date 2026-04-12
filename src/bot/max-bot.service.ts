@@ -6,7 +6,7 @@ import { repository } from '../db/repository';
 import { externalSubmissionService } from '../integrations/external/submission.service';
 import { yooKassaClient, YooWebhookEvent } from '../integrations/yookassa/client';
 import { logger } from '../logger';
-import { actService, validateDraft } from '../services/act.service';
+import { validateDraft } from '../services/act.service';
 import type { ActDraft, BotUser, UserSession } from '../types';
 import { computeValidUntil, isFutureDate, parseDateOrNull, toDateView, todayDateString } from '../utils/dates';
 import { formatRub } from '../utils/format';
@@ -133,17 +133,18 @@ export class MaxBotService {
           return;
         }
 
-        const act = await actService.createAndStoreAct({
-          user,
-          draft,
+        await repository.enqueueActGenerationJob({
+          userId: user.id,
+          pendingActId: pendingAct.id,
+          draft: pendingAct.draft,
           priceRub: pendingAct.priceRub,
           paymentId: payment.id,
         });
 
-        await repository.setPendingActStatus(pendingAct.id, 'completed');
-
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Payment succeeded. Act created successfully.');
-        await sendFileToUser(this.bot.api, user.maxUserId, act.pdfPath, `Act #${act.actNumber}`);
+        await this.bot.api.sendMessageToUser(
+          user.maxUserId,
+          'Payment succeeded. Your act has been queued for generation.',
+        );
       }
     }
 
@@ -833,15 +834,23 @@ export class MaxBotService {
     const price = user.verified ? prices.verifiedPrice : prices.defaultPrice;
 
     if (price === 0) {
-      const act = await actService.createAndStoreAct({
-        user,
+      const pending = await repository.createPendingAct({
+        userId: user.id,
+        source: draft.source,
+        draft,
+        priceRub: 0,
+        status: 'paid',
+      });
+
+      await repository.enqueueActGenerationJob({
+        userId: user.id,
+        pendingActId: pending.id,
         draft,
         priceRub: 0,
       });
 
       await repository.clearSession(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Act created successfully.');
-      await sendFileToUser(this.bot.api, user.maxUserId, act.pdfPath, `Act #${act.actNumber}`);
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Act request accepted. Your document is queued for generation.');
       await this.showMainMenu(user.maxUserId);
       return;
     }
@@ -863,21 +872,36 @@ export class MaxBotService {
         },
       });
 
+      let pendingId: number | null = null;
       try {
-        const act = await actService.createAndStoreAct({
-          user,
+        const pending = await repository.createPendingAct({
+          userId: user.id,
+          source: draft.source,
           draft,
           priceRub: price,
+          status: 'paid',
           paymentId: payment.id,
         });
 
+        pendingId = pending.id;
+
+        await repository.enqueueActGenerationJob({
+          userId: user.id,
+          pendingActId: pending.id,
+          paymentId: payment.id,
+          draft,
+          priceRub: price,
+        });
+
         await repository.clearSession(user.id);
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Act created successfully.');
-        await sendFileToUser(this.bot.api, user.maxUserId, act.pdfPath, `Act #${act.actNumber}`);
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Act request accepted. Your document is queued for generation.');
         await this.showMainMenu(user.maxUserId);
       } catch (error) {
         await repository.changeBalance(user.id, price);
         await repository.updatePaymentStatusById(payment.id, 'failed');
+        if (pendingId) {
+          await repository.setPendingActStatus(pendingId, 'cancelled');
+        }
         throw error;
       }
 

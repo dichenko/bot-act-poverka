@@ -14,6 +14,23 @@
       - app-net
     volumes:
       - ./storage:/app/storage
+      - ./template:/app/template:ro
+
+  worker:
+    build: .
+    container_name: max-act-worker
+    restart: unless-stopped
+    command: sh -c "node dist/db/migrate.js && node dist/worker/index.js"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-net
+    volumes:
+      - ./storage:/app/storage
+      - ./template:/app/template:ro
 
   postgres:
     image: postgres:16-alpine

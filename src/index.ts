@@ -50,7 +50,9 @@ app.post(env.YOOKASSA_WEBHOOK_PATH, async (req, res) => {
 
 const start = async (): Promise<void> => {
   await ensureDir(env.ACT_STORAGE_DIR);
+  await ensureDir(env.ACT_XLSX_STORAGE_DIR);
   await ensureDir(env.OFFER_STORAGE_DIR);
+  await ensureDir(env.ACT_TEMPLATE_DIR);
 
   await maxBotService.init();
 

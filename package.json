@@ -9,7 +9,9 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "worker": "node dist/worker/index.js",
+    "dev:worker": "tsx watch src/worker/index.ts"
   },
   "repository": {
     "type": "git",
@@ -26,6 +28,7 @@
     "@maxhub/max-bot-api": "^0.2.2",
     "date-fns": "^4.1.0",
     "dotenv": "^17.4.1",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "pdfkit": "^0.18.0",
     "pg": "^8.20.0",

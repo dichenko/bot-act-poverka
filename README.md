@@ -9,8 +9,9 @@ Production-oriented MAX messenger bot in TypeScript for generating water meter i
 - PostgreSQL + SQL migrations
 - pgAdmin (in Docker Compose)
 - Webhook HTTP server on Express
+- Dedicated queue worker for act generation
 - YooKassa integration (payments + webhook)
-- PDF generation
+- Excel template-based generation + XLSX to PDF conversion (LibreOffice)
 - Docker Compose deployment for VPS
 - HTTPS reverse proxy via Caddy
 
@@ -56,8 +57,12 @@ To keep webhook mode as required, this project receives webhook updates over HTT
 - `src/integrations/external/submission.service.ts` - external DB import
 - `src/integrations/yookassa/client.ts` - YooKassa API client
 - `src/services/act.service.ts` - act creation orchestration
+- `src/services/act-template.service.ts` - Excel template fill + PDF conversion
+- `src/services/act-generation-queue.service.ts` - queue processing logic
+- `src/worker/index.ts` - standalone worker process
 - `src/services/pdf.service.ts` - PDF generation
 - `migrations/001_init.sql` - schema initialization
+- `migrations/003_act_generation_jobs.sql` - queue and debug file path storage
 - `docker-compose.yml` - bot + postgres + pgAdmin + Caddy
 - `deploy/Caddyfile` - HTTPS reverse proxy config
 - `WORK_PLAN.md` - required checklist with progress marks
@@ -109,6 +114,7 @@ docker compose --env-file .env up -d --build
 
 Services:
 - `bot` (internal port `3000`)
+- `worker` (polling queued act-generation jobs)
 - `postgres` (private internal network)
 - `pgadmin` (proxied through HTTPS subdomain)
 
@@ -140,4 +146,26 @@ Ignored fields from submission:
 
 - Add integration tests against real MAX webhook payloads and YooKassa sandbox.
 - Optional: configure custom font (`PDF_FONT_PATH`) to guarantee Cyrillic rendering quality in all PDF viewers.
+
+## Template placeholders
+
+Put your template `.xlsx` file into `template/` (or set `ACT_TEMPLATE_FILE`).
+Supported placeholders inside cells:
+
+- `{{act_number}}`
+- `{{user_id}}`
+- `{{user_fullname}}`
+- `{{org_name}}`
+- `{{address}}`
+- `{{water_type}}`
+- `{{meter_model}}`
+- `{{serial_number}}`
+- `{{current_reading}}`
+- `{{check_date}}`
+- `{{interval_years}}`
+- `{{valid_until}}`
+- `{{result}}`
+- `{{price_rub}}`
+- `{{source}}`
+- `{{submission_id}}`
 

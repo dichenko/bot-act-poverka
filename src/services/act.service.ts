@@ -4,7 +4,7 @@ import { withTransaction } from '../db/pool';
 import { repository } from '../db/repository';
 import type { ActDraft, BotUser } from '../types';
 import { computeValidUntil, parseDateOrNull } from '../utils/dates';
-import { pdfService } from './pdf.service';
+import { actTemplateService } from './act-template.service';
 
 export const validateDraft = (draft: Partial<ActDraft>): draft is ActDraft => {
   const checkDate = typeof draft.checkDate === 'string' ? parseDateOrNull(draft.checkDate) : null;
@@ -36,7 +36,7 @@ export class ActService {
     draft: ActDraft;
     priceRub: number;
     paymentId?: number | null;
-  }): Promise<{ actId: number; pdfPath: string; actNumber: string; validUntil: string }> {
+  }): Promise<{ actId: number; xlsxPath: string; pdfPath: string; actNumber: string; validUntil: string }> {
     const checkDate = parseDateOrNull(input.draft.checkDate);
     if (!checkDate) {
       throw new Error('Invalid check date in draft');
@@ -46,7 +46,7 @@ export class ActService {
     const validUntilStr = format(validUntil, 'yyyy-MM-dd');
     const actNumber = this.buildActNumber();
 
-    const pdfPath = await pdfService.generateAct({
+    const files = await actTemplateService.generateActFiles({
       user: input.user,
       draft: input.draft,
       validUntil: format(validUntil, 'dd.MM.yyyy'),
@@ -64,7 +64,8 @@ export class ActService {
         validUntil: validUntilStr,
         priceRub: input.priceRub,
         paymentId: input.paymentId ?? null,
-        pdfPath,
+        xlsxPath: files.xlsxPath,
+        pdfPath: files.pdfPath,
         db: client,
       });
 
@@ -72,7 +73,8 @@ export class ActService {
 
       return {
         actId: created.id,
-        pdfPath,
+        xlsxPath: files.xlsxPath,
+        pdfPath: files.pdfPath,
         actNumber,
         validUntil: format(validUntil, 'dd.MM.yyyy'),
       };

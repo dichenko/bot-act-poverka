@@ -61,6 +61,8 @@
 
 ## Phase 8 — PDF generation
 - [x] Implement PDF generation service
+- [x] Implement Excel template generation and keep XLSX for debugging
+- [x] Implement background queue worker for act generation
 - [x] Send PDF to MAX chat
 - [x] Store PDF for history/download
 - [x] Handle duplicate act numbers correctly

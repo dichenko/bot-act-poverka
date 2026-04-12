@@ -87,3 +87,17 @@ export type SubmissionImport = {
   orgName: string | null;
 };
 
+export type ActGenerationJob = {
+  id: number;
+  userId: number;
+  pendingActId: number | null;
+  paymentId: number | null;
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  draft: ActDraft;
+  priceRub: number;
+  xlsxPath: string | null;
+  pdfPath: string | null;
+  errorMessage: string | null;
+  attempts: number;
+};
+

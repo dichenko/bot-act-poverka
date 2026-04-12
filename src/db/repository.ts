@@ -1,6 +1,6 @@
 ﻿import type { PoolClient, QueryResultRow } from 'pg';
 import { pool, withTransaction } from './pool';
-import type { ActDraft, BotUser, CurrentOffer, PaymentRecord, UserSession } from '../types';
+import type { ActDraft, ActGenerationJob, BotUser, CurrentOffer, PaymentRecord, UserSession } from '../types';
 
 type DB = PoolClient | typeof pool;
 
@@ -30,6 +30,20 @@ const toPaymentRecord = (row: QueryResultRow): PaymentRecord => ({
   providerPaymentId: row.provider_payment_id,
   confirmationUrl: row.confirmation_url,
   metadata: row.metadata ?? {},
+});
+
+const toActGenerationJob = (row: QueryResultRow): ActGenerationJob => ({
+  id: Number(row.id),
+  userId: Number(row.user_id),
+  pendingActId: row.pending_act_id == null ? null : Number(row.pending_act_id),
+  paymentId: row.payment_id == null ? null : Number(row.payment_id),
+  status: row.status,
+  draft: row.draft,
+  priceRub: Number(row.price_rub),
+  xlsxPath: row.xlsx_path ?? null,
+  pdfPath: row.pdf_path ?? null,
+  errorMessage: row.error_message ?? null,
+  attempts: Number(row.attempts ?? 0),
 });
 
 export class Repository {
@@ -392,6 +406,114 @@ export class Repository {
     await pool.query('UPDATE pending_acts SET status = $2, updated_at = NOW() WHERE id = $1', [id, status]);
   }
 
+  async enqueueActGenerationJob(input: {
+    userId: number;
+    pendingActId?: number | null;
+    paymentId?: number | null;
+    draft: ActDraft;
+    priceRub: number;
+  }): Promise<ActGenerationJob> {
+    const { rows } = await pool.query(
+      `
+      INSERT INTO act_generation_jobs(
+        user_id,
+        pending_act_id,
+        payment_id,
+        status,
+        draft,
+        price_rub,
+        updated_at
+      )
+      VALUES ($1, $2, $3, 'queued', $4::jsonb, $5, NOW())
+      ON CONFLICT (pending_act_id) DO NOTHING
+      RETURNING *
+      `,
+      [input.userId, input.pendingActId ?? null, input.paymentId ?? null, JSON.stringify(input.draft), input.priceRub],
+    );
+
+    if (rows[0]) {
+      return toActGenerationJob(rows[0]);
+    }
+
+    if (input.pendingActId != null) {
+      const existing = await pool.query('SELECT * FROM act_generation_jobs WHERE pending_act_id = $1 LIMIT 1', [input.pendingActId]);
+      if (existing.rows[0]) {
+        return toActGenerationJob(existing.rows[0]);
+      }
+    }
+
+    throw new Error('Unable to enqueue generation job');
+  }
+
+  async lockNextQueuedActGenerationJob(): Promise<ActGenerationJob | null> {
+    return withTransaction(async (client) => {
+      const selected = await client.query(
+        `
+        SELECT *
+        FROM act_generation_jobs
+        WHERE status = 'queued'
+        ORDER BY created_at ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+        `,
+      );
+
+      if (!selected.rows[0]) {
+        return null;
+      }
+
+      const id = Number(selected.rows[0].id);
+      const updated = await client.query(
+        `
+        UPDATE act_generation_jobs
+        SET status = 'processing',
+            attempts = attempts + 1,
+            started_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+        RETURNING *
+        `,
+        [id],
+      );
+
+      return updated.rows[0] ? toActGenerationJob(updated.rows[0]) : null;
+    });
+  }
+
+  async markActGenerationJobCompleted(input: {
+    jobId: number;
+    xlsxPath: string;
+    pdfPath: string;
+  }): Promise<void> {
+    await pool.query(
+      `
+      UPDATE act_generation_jobs
+      SET status = 'completed',
+          xlsx_path = $2,
+          pdf_path = $3,
+          error_message = NULL,
+          finished_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $1
+      `,
+      [input.jobId, input.xlsxPath, input.pdfPath],
+    );
+  }
+
+  async markActGenerationJobFailed(jobId: number, errorMessage: string): Promise<void> {
+    await pool.query(
+      `
+      UPDATE act_generation_jobs
+      SET status = 'failed',
+          error_message = $2,
+          finished_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $1
+      `,
+      [jobId, errorMessage],
+    );
+  }
+
   async createAct(input: {
     userId: number;
     source: 'manual' | 'submission';
@@ -401,6 +523,7 @@ export class Repository {
     validUntil: string;
     priceRub: number;
     paymentId?: number | null;
+    xlsxPath?: string | null;
     pdfPath: string;
     db?: DB;
   }): Promise<{ id: number }> {
@@ -424,9 +547,10 @@ export class Repository {
         result,
         price_rub,
         payment_id,
+        xlsx_path,
         pdf_path
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date, $11, $12::date, $13, $14, $15, $16)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::date, $11, $12::date, $13, $14, $15, $16, $17)
       RETURNING id
       `,
       [
@@ -445,6 +569,7 @@ export class Repository {
         draft.result,
         input.priceRub,
         input.paymentId ?? null,
+        input.xlsxPath ?? null,
         input.pdfPath,
       ],
     );
