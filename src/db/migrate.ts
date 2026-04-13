@@ -31,19 +31,23 @@ const run = async (): Promise<void> => {
       continue;
     }
 
-    const sql = await fs.readFile(path.join(migrationsDir, file), 'utf8');
+    const rawSql = await fs.readFile(path.join(migrationsDir, file), 'utf8');
+    const sql = rawSql.replace(/^\uFEFF/, '');
     logger.info({ file }, 'Applying migration');
 
-    await pool.query('BEGIN');
+    const client = await pool.connect();
     try {
-      await pool.query(sql);
-      await pool.query('INSERT INTO schema_migrations(version) VALUES ($1)', [file]);
-      await pool.query('COMMIT');
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query('INSERT INTO schema_migrations(version) VALUES ($1)', [file]);
+      await client.query('COMMIT');
       logger.info({ file }, 'Migration applied');
     } catch (error) {
-      await pool.query('ROLLBACK');
+      await client.query('ROLLBACK');
       logger.error({ error, file }, 'Migration failed');
       throw error;
+    } finally {
+      client.release();
     }
   }
 

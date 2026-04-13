@@ -1,4 +1,4 @@
-﻿ALTER TABLE acts
+ALTER TABLE acts
 ADD COLUMN IF NOT EXISTS xlsx_path TEXT;
 
 CREATE TABLE IF NOT EXISTS act_generation_jobs (
