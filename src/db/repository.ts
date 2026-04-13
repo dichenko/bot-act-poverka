@@ -1,6 +1,7 @@
-﻿import type { PoolClient, QueryResultRow } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import { pool, withTransaction } from './pool';
 import type { ActDraft, ActGenerationJob, BotUser, CurrentOffer, PaymentRecord, UserSession } from '../types';
+import { toDbDateStringOrNull } from '../utils/dates';
 
 type DB = PoolClient | typeof pool;
 
@@ -534,6 +535,16 @@ export class Repository {
   }): Promise<{ id: number }> {
     const db = input.db ?? pool;
     const { draft } = input;
+    const checkDateDb = toDbDateStringOrNull(draft.checkDate);
+    if (!checkDateDb) {
+      throw new Error(`Invalid checkDate format: "${draft.checkDate}"`);
+    }
+
+    const validUntilDb = toDbDateStringOrNull(input.validUntil);
+    if (!validUntilDb) {
+      throw new Error(`Invalid validUntil format: "${input.validUntil}"`);
+    }
+
     const { rows } = await db.query(
       `
       INSERT INTO acts(
@@ -568,9 +579,9 @@ export class Repository {
         draft.meterModel,
         draft.serialNumber,
         draft.currentReading,
-        draft.checkDate,
+        checkDateDb,
         draft.intervalYears,
-        input.validUntil,
+        validUntilDb,
         draft.result,
         input.priceRub,
         input.paymentId ?? null,
