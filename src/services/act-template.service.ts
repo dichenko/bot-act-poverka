@@ -30,7 +30,7 @@ export class ActTemplateService {
 
   private formatContactNumber2WithPhoneIcon(user: BotUser): string {
     const second = this.getContactNumber2(user);
-    return second ? `📞 ${second}` : '';
+    return second ? `☎ ${second}` : '';
   }
 
   private composeContactNumber(user: BotUser): string {
@@ -68,7 +68,7 @@ export class ActTemplateService {
     workbook.eachSheet((worksheet) => {
       worksheet.pageSetup = {
         ...worksheet.pageSetup,
-        paperSize: 9,
+        paperSize: 11,
         orientation: 'portrait',
         fitToPage: true,
         fitToWidth: 1,
