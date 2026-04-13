@@ -20,6 +20,10 @@ const replacePlaceholders = (template: string, values: Record<string, string>): 
 };
 
 export class ActTemplateService {
+  private normalizePrintableText(value: string): string {
+    return value.replace(/📞/g, '☎');
+  }
+
   private getContactNumber1(user: BotUser): string {
     return user.contactNumber1.trim();
   }
@@ -73,12 +77,20 @@ export class ActTemplateService {
         fitToPage: true,
         fitToWidth: 1,
         fitToHeight: 1,
+        margins: {
+          left: 0.15,
+          right: 0.15,
+          top: 0.3,
+          bottom: 0.3,
+          header: 0.15,
+          footer: 0.15,
+        },
       };
 
       worksheet.eachRow({ includeEmpty: true }, (row) => {
         row.eachCell({ includeEmpty: true }, (cell) => {
           if (typeof cell.value === 'string') {
-            cell.value = replacePlaceholders(cell.value, options.values);
+            cell.value = this.normalizePrintableText(replacePlaceholders(cell.value, options.values));
             return;
           }
 
@@ -87,7 +99,7 @@ export class ActTemplateService {
             if (Array.isArray(richText)) {
               for (const item of richText) {
                 if (typeof item.text === 'string') {
-                  item.text = replacePlaceholders(item.text, options.values);
+                  item.text = this.normalizePrintableText(replacePlaceholders(item.text, options.values));
                 }
               }
             }
@@ -105,7 +117,7 @@ export class ActTemplateService {
     await new Promise<void>((resolve, reject) => {
       const process = spawn(
         env.LIBREOFFICE_BIN,
-        ['--headless', '--convert-to', 'pdf', '--outdir', outputDir, xlsxPath],
+        ['--headless', '--convert-to', 'pdf:calc_pdf_Export', '--outdir', outputDir, xlsxPath],
         {
           stdio: ['ignore', 'pipe', 'pipe'],
         },
@@ -163,6 +175,7 @@ export class ActTemplateService {
       contact_number: this.composeContactNumber(input.user),
       contact_number_1: this.getContactNumber1(input.user),
       contact_number_2: this.getContactNumber2(input.user),
+      '☎ contact_number_2': this.formatContactNumber2WithPhoneIcon(input.user),
       '📞 contact_number_2': this.formatContactNumber2WithPhoneIcon(input.user),
       address: input.draft.address,
       water_type: input.draft.waterType,
