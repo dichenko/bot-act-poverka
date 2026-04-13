@@ -20,11 +20,23 @@ const replacePlaceholders = (template: string, values: Record<string, string>): 
 };
 
 export class ActTemplateService {
+  private getContactNumber1(user: BotUser): string {
+    return user.contactNumber1.trim();
+  }
+
+  private getContactNumber2(user: BotUser): string {
+    return user.contactNumber2.trim();
+  }
+
+  private formatContactNumber2WithPhoneIcon(user: BotUser): string {
+    const second = this.getContactNumber2(user);
+    return second ? `📞 ${second}` : '';
+  }
+
   private composeContactNumber(user: BotUser): string {
-    const parts = [user.contactNumber1, user.contactNumber2]
-      .map((value) => value.trim())
+    const parts = [this.getContactNumber1(user), this.getContactNumber2(user)]
       .filter((value) => value.length > 0);
-    return parts.join(', ');
+    return parts.join('  |  ');
   }
 
   private async resolveTemplatePath(): Promise<string> {
@@ -54,6 +66,15 @@ export class ActTemplateService {
     await workbook.xlsx.readFile(options.templatePath);
 
     workbook.eachSheet((worksheet) => {
+      worksheet.pageSetup = {
+        ...worksheet.pageSetup,
+        paperSize: 9,
+        orientation: 'portrait',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 1,
+      };
+
       worksheet.eachRow({ includeEmpty: true }, (row) => {
         row.eachCell({ includeEmpty: true }, (cell) => {
           if (typeof cell.value === 'string') {
@@ -140,8 +161,9 @@ export class ActTemplateService {
       user_fullname: input.user.userFullname ?? '',
       org_name: input.user.orgName ?? '',
       contact_number: this.composeContactNumber(input.user),
-      contact_number_1: input.user.contactNumber1,
-      contact_number_2: input.user.contactNumber2,
+      contact_number_1: this.getContactNumber1(input.user),
+      contact_number_2: this.getContactNumber2(input.user),
+      '📞 contact_number_2': this.formatContactNumber2WithPhoneIcon(input.user),
       address: input.draft.address,
       water_type: input.draft.waterType,
       meter_model: input.draft.meterModel,
