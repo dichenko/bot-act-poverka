@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "worker": "node dist/worker/index.js",
     "dev:worker": "tsx watch src/worker/index.ts",
-    "test:act:once": "tsx src/scripts/test-act-generation.ts"
+    "test:act:once": "tsx src/scripts/test-act-generation.ts",
+    "test:act:once:prod": "node dist/scripts/test-act-generation.js"
   },
   "repository": {
     "type": "git",
