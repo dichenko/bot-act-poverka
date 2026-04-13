@@ -20,6 +20,13 @@ const replacePlaceholders = (template: string, values: Record<string, string>): 
 };
 
 export class ActTemplateService {
+  private composeContactNumber(user: BotUser): string {
+    const parts = [user.contactNumber1, user.contactNumber2]
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    return parts.join(', ');
+  }
+
   private async resolveTemplatePath(): Promise<string> {
     if (env.ACT_TEMPLATE_FILE && (await fileExists(env.ACT_TEMPLATE_FILE))) {
       return env.ACT_TEMPLATE_FILE;
@@ -132,6 +139,7 @@ export class ActTemplateService {
       user_id: String(input.user.maxUserId),
       user_fullname: input.user.userFullname ?? '',
       org_name: input.user.orgName ?? '',
+      contact_number: this.composeContactNumber(input.user),
       contact_number_1: input.user.contactNumber1,
       contact_number_2: input.user.contactNumber2,
       address: input.draft.address,
