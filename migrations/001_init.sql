@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   last_name TEXT,
   user_fullname TEXT,
   org_name TEXT,
+  contact_number_1 TEXT NOT NULL DEFAULT '+7 (495) 123-30-70',
+  contact_number_2 TEXT NOT NULL DEFAULT '',
   verified BOOLEAN NOT NULL DEFAULT FALSE,
   accepted_offer_version TEXT,
   accepted_offer_at TIMESTAMPTZ,

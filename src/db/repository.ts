@@ -15,6 +15,8 @@ const toBotUser = (row: QueryResultRow): BotUser => ({
   lastName: row.last_name,
   userFullname: row.user_fullname,
   orgName: row.org_name,
+  contactNumber1: row.contact_number_1 ?? '+7 (495) 123-30-70',
+  contactNumber2: row.contact_number_2 ?? '',
   verified: row.verified,
   acceptedOfferVersion: row.accepted_offer_version,
   acceptedOfferAt: row.accepted_offer_at,

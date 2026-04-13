@@ -132,6 +132,8 @@ export class ActTemplateService {
       user_id: String(input.user.maxUserId),
       user_fullname: input.user.userFullname ?? '',
       org_name: input.user.orgName ?? '',
+      contact_number_1: input.user.contactNumber1,
+      contact_number_2: input.user.contactNumber2,
       address: input.draft.address,
       water_type: input.draft.waterType,
       meter_model: input.draft.meterModel,

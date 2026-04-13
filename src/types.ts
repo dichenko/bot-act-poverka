@@ -23,6 +23,8 @@ export type BotUser = {
   lastName: string | null;
   userFullname: string | null;
   orgName: string | null;
+  contactNumber1: string;
+  contactNumber2: string;
   verified: boolean;
   acceptedOfferVersion: string | null;
   acceptedOfferAt: Date | null;
