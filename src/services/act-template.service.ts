@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import ExcelJS from 'exceljs';
 import { randomUUID } from 'node:crypto';
+import { format } from 'date-fns';
 import { env } from '../config/env';
 import type { ActDraft, BotUser } from '../types';
 import { boolResultToText } from '../utils/format';
@@ -20,6 +21,12 @@ const replacePlaceholders = (template: string, values: Record<string, string>): 
 };
 
 export class ActTemplateService {
+  private buildActFileBaseName(maxUserId: number): string {
+    const timestamp = format(new Date(), 'yyyy-MM-dd-m-s');
+    const uniqNum = randomUUID().replace(/-/g, '').slice(0, 6);
+    return `act-${timestamp}-${maxUserId}-${uniqNum}`;
+  }
+
   private normalizePrintableText(value: string): string {
     return value.replace(/📞/g, '☎');
   }
@@ -164,7 +171,7 @@ export class ActTemplateService {
 
     const templatePath = await this.resolveTemplatePath();
 
-    const filename = `act-${Date.now()}-${randomUUID()}`;
+    const filename = this.buildActFileBaseName(input.user.maxUserId);
     const outputXlsxPath = path.join(env.ACT_XLSX_STORAGE_DIR, `${filename}.xlsx`);
 
     const placeholders: Record<string, string> = {
