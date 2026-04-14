@@ -1296,9 +1296,27 @@ export class MaxBotService {
           return;
         }
 
-        await repository.changeBalance(target.id, amount);
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Баланс успешно обновлен.');
-        await this.bot.api.sendMessageToUser(target.maxUserId, `Ваш баланс изменен администратором: ${formatRub(amount)}`);
+        const balanceBefore = target.balanceRub;
+        const balanceAfter = await repository.changeBalance(target.id, amount);
+
+        await this.bot.api.sendMessageToUser(
+          user.maxUserId,
+          [
+            'Баланс успешно пополнен.',
+            `Было: ${formatRub(balanceBefore)}`,
+            `Добавлено: ${formatRub(amount)}`,
+            `Стало: ${formatRub(balanceAfter)}`,
+          ].join('\n'),
+        );
+        await this.bot.api.sendMessageToUser(
+          target.maxUserId,
+          [
+            'Администратор пополнил ваш баланс.',
+            `Было: ${formatRub(balanceBefore)}`,
+            `Добавлено: ${formatRub(amount)}`,
+            `Стало: ${formatRub(balanceAfter)}`,
+          ].join('\n'),
+        );
         return;
       }
 

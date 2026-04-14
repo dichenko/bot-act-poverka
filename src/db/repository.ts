@@ -150,16 +150,23 @@ export class Repository {
     );
   }
 
-  async changeBalance(userId: number, deltaRub: number, db: DB = pool): Promise<void> {
-    await db.query(
+  async changeBalance(userId: number, deltaRub: number, db: DB = pool): Promise<number> {
+    const { rows } = await db.query(
       `
       UPDATE users
       SET balance_rub = balance_rub + $2,
           updated_at = NOW()
       WHERE id = $1
+      RETURNING balance_rub
       `,
       [userId, deltaRub],
     );
+
+    if (!rows[0]) {
+      throw new Error(`User not found for balance change: ${userId}`);
+    }
+
+    return Number(rows[0].balance_rub);
   }
 
   async incrementActsCount(userId: number, db: DB = pool): Promise<void> {
