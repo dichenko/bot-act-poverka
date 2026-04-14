@@ -473,8 +473,8 @@ export class MaxBotService {
           attachments: [
             makeKeyboard([
               [
-                { text: 'ХВС', payload: CB.WATER_HVS },
-                { text: 'ГВС', payload: CB.WATER_GVS },
+                { text: '🚰 ХВС', payload: CB.WATER_HVS },
+                { text: '♨️ ГВС', payload: CB.WATER_GVS },
               ],
               [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
             ]),
@@ -565,9 +565,9 @@ export class MaxBotService {
           attachments: [
             makeKeyboard([
               [
-                { text: '4 года', payload: CB.INTERVAL_4 },
-                { text: '5 лет', payload: CB.INTERVAL_5 },
-                { text: '6 лет', payload: CB.INTERVAL_6 },
+                { text: '📅 4 года', payload: CB.INTERVAL_4 },
+                { text: '📅 5 лет', payload: CB.INTERVAL_5 },
+                { text: '📅 6 лет', payload: CB.INTERVAL_6 },
               ],
               [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
             ]),
@@ -608,9 +608,9 @@ export class MaxBotService {
           attachments: [
             makeKeyboard([
               [
-                { text: '4 года', payload: CB.INTERVAL_4 },
-                { text: '5 лет', payload: CB.INTERVAL_5 },
-                { text: '6 лет', payload: CB.INTERVAL_6 },
+                { text: '📅 4 года', payload: CB.INTERVAL_4 },
+                { text: '📅 5 лет', payload: CB.INTERVAL_5 },
+                { text: '📅 6 лет', payload: CB.INTERVAL_6 },
               ],
               [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
             ]),
@@ -818,7 +818,7 @@ export class MaxBotService {
     await this.bot.api.sendMessageToUser(user.maxUserId, lines.join('\n'), {
       attachments: [
         makeKeyboard([
-          [{ text: price > 0 ? '✅ Подтвердить и оплатить' : '✅ Получить акт', payload: CB.DRAFT_CONFIRM, intent: 'positive' }],
+          [{ text: price > 0 ? '💳 Подтвердить и оплатить' : '📄 Получить акт', payload: CB.DRAFT_CONFIRM, intent: 'positive' }],
           [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
@@ -918,8 +918,8 @@ export class MaxBotService {
     await this.bot.api.sendMessageToUser(user.maxUserId, 'Недостаточно средств на балансе.', {
       attachments: [
         makeKeyboard([
-          [{ text: 'Разовый платеж', payload: CB.INSUFFICIENT_ONE_TIME, intent: 'positive' }],
-          [{ text: 'Пополнить баланс', payload: CB.INSUFFICIENT_TOPUP }],
+          [{ text: '💳 Разовый платеж', payload: CB.INSUFFICIENT_ONE_TIME, intent: 'positive' }],
+          [{ text: '💰 Пополнить баланс', payload: CB.INSUFFICIENT_TOPUP }],
           [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
@@ -974,7 +974,7 @@ export class MaxBotService {
     await repository.clearSession(user.id);
 
     const keyboard = yooPayment.confirmationUrl
-      ? Keyboard.inlineKeyboard([[Keyboard.button.link('Оплатить', yooPayment.confirmationUrl)]])
+      ? Keyboard.inlineKeyboard([[Keyboard.button.link('💳 Оплатить', yooPayment.confirmationUrl)]])
       : undefined;
 
     await this.bot.api.sendMessageToUser(
@@ -991,11 +991,11 @@ export class MaxBotService {
       attachments: [
         makeKeyboard([
           [
-            { text: '10 ₽', payload: CB.TOPUP_10 },
-            { text: '50 ₽', payload: CB.TOPUP_50 },
-            { text: '100 ₽', payload: CB.TOPUP_100 },
+            { text: '💳 10 ₽', payload: CB.TOPUP_10 },
+            { text: '💳 50 ₽', payload: CB.TOPUP_50 },
+            { text: '💳 100 ₽', payload: CB.TOPUP_100 },
           ],
-          [{ text: 'Другая сумма', payload: CB.TOPUP_OTHER }],
+          [{ text: '✏️ Другая сумма', payload: CB.TOPUP_OTHER }],
           [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
@@ -1028,7 +1028,7 @@ export class MaxBotService {
     await repository.setPaymentProviderData(payment.id, yooPayment.id, yooPayment.confirmationUrl);
 
     const keyboard = yooPayment.confirmationUrl
-      ? Keyboard.inlineKeyboard([[Keyboard.button.link('Оплатить', yooPayment.confirmationUrl)]])
+      ? Keyboard.inlineKeyboard([[Keyboard.button.link('💳 Оплатить', yooPayment.confirmationUrl)]])
       : undefined;
 
     await this.bot.api.sendMessageToUser(
