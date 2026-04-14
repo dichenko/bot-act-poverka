@@ -59,7 +59,7 @@ export class MaxBotService {
     this.bot.catch(async (error, ctx) => {
       logger.error({ error, update: ctx.update }, 'Unhandled bot error');
       if (ctx.user?.user_id) {
-        await this.bot.api.sendMessageToUser(ctx.user.user_id, 'Internal error. Please try again later.');
+        await this.bot.api.sendMessageToUser(ctx.user.user_id, 'Внутренняя ошибка. Попробуйте позже.');
       }
     });
   }
@@ -68,8 +68,8 @@ export class MaxBotService {
     await repository.ensurePrices();
 
     await this.bot.api.setMyCommands([
-      { name: 'start', description: 'Open main menu' },
-      { name: 'help', description: 'Help contact' },
+      { name: 'start', description: 'Открыть главное меню' },
+      { name: 'help', description: 'Контакты поддержки' },
     ]);
   }
 
@@ -105,7 +105,7 @@ export class MaxBotService {
         if (user) {
           await this.bot.api.sendMessageToUser(
             user.maxUserId,
-            `Payment succeeded. Balance topped up by ${formatRub(payment.amountRub)}.`,
+            `Платеж успешно завершен. Баланс пополнен на ${formatRub(payment.amountRub)}.`,
           );
         }
       }
@@ -129,7 +129,7 @@ export class MaxBotService {
 
         const draft = pendingAct.draft;
         if (!validateDraft(draft)) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Could not recognize all required fields. Please try again.');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
           return;
         }
 
@@ -143,7 +143,7 @@ export class MaxBotService {
 
         await this.bot.api.sendMessageToUser(
           user.maxUserId,
-          'Payment succeeded. Your act has been queued for generation.',
+          'Платеж успешно завершен. Заявка на акт поставлена в очередь на генерацию.',
         );
       }
     }
@@ -155,7 +155,7 @@ export class MaxBotService {
 
       const user = await repository.getUserById(payment.userId);
       if (user) {
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Payment failed.');
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Платеж не прошел.');
       }
     }
   }
@@ -167,7 +167,7 @@ export class MaxBotService {
       logger.error({ error, update: ctx.update }, 'Handler failed');
       const userId = ctx.user?.user_id ?? ctx.callback?.user?.user_id;
       if (userId) {
-        await this.bot.api.sendMessageToUser(userId, 'Internal error. Please try again later.');
+        await this.bot.api.sendMessageToUser(userId, 'Внутренняя ошибка. Попробуйте позже.');
       }
     }
   }
@@ -231,6 +231,13 @@ export class MaxBotService {
     return value;
   }
 
+  private async sendAdminHelp(maxUserId: number): Promise<void> {
+    const current = await repository.getCurrentOffer();
+    const versionText = current?.version ?? 'не опубликована';
+    const text = `${ADMIN_HELP_TEXT}\n\nТекущая версия оферты: ${versionText}`;
+    await this.bot.api.sendMessageToUser(maxUserId, text);
+  }
+
   private async onBotStarted(ctx: Context): Promise<void> {
     const user = await this.syncUser(ctx);
     if (!user) {
@@ -238,7 +245,7 @@ export class MaxBotService {
     }
 
     if (isAdmin(user.maxUserId)) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, ADMIN_HELP_TEXT);
+      await this.sendAdminHelp(user.maxUserId);
       return;
     }
 
@@ -303,14 +310,14 @@ export class MaxBotService {
     }
 
     if (payload === CB.DECLINE_OFFER) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'You declined the offer. Main features are blocked.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Вы отказались от оферты. Основные функции заблокированы.');
       return;
     }
 
     if (isAdmin(user.maxUserId) && payload === CB.CANCEL) {
       await repository.clearSession(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Operation cancelled by user.');
-      await this.bot.api.sendMessageToUser(user.maxUserId, ADMIN_HELP_TEXT);
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Операция отменена пользователем.');
+      await this.sendAdminHelp(user.maxUserId);
       return;
     }
 
@@ -325,7 +332,7 @@ export class MaxBotService {
 
     if (payload === CB.CANCEL) {
       await repository.clearSession(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Operation cancelled by user.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Операция отменена пользователем.');
       await this.showMainMenu(user.maxUserId);
       return;
     }
@@ -382,14 +389,14 @@ export class MaxBotService {
 
   private async sendOfferForAcceptance(maxUserId: number, version: string, filePath: string): Promise<void> {
     if (await fileExists(filePath)) {
-      await sendFileToUser(this.bot.api, maxUserId, filePath, `Current offer version: ${version}`);
+      await sendFileToUser(this.bot.api, maxUserId, filePath, `Текущая версия оферты: ${version}`);
     }
 
-    await this.bot.api.sendMessageToUser(maxUserId, `Offer version ${version} must be accepted to continue.`, {
+    await this.bot.api.sendMessageToUser(maxUserId, `Для продолжения необходимо принять оферту версии ${version}.`, {
       attachments: [
         makeKeyboard([
-          [{ text: '? Accept offer', payload: CB.ACCEPT_OFFER, intent: 'positive' }],
-          [{ text: '? Decline offer', payload: CB.DECLINE_OFFER, intent: 'negative' }],
+          [{ text: '✅ Принять оферту', payload: CB.ACCEPT_OFFER, intent: 'positive' }],
+          [{ text: '❌ Отказаться', payload: CB.DECLINE_OFFER, intent: 'negative' }],
         ]),
       ],
     });
@@ -398,12 +405,12 @@ export class MaxBotService {
   private async acceptOffer(user: BotUser): Promise<void> {
     const current = await repository.getCurrentOffer();
     if (!current) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'No current offer is published.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Текущая оферта не опубликована.');
       return;
     }
 
     await repository.acceptOffer(user.id, current.version);
-    await this.bot.api.sendMessageToUser(user.maxUserId, 'Offer accepted successfully.');
+    await this.bot.api.sendMessageToUser(user.maxUserId, 'Оферта успешно принята.');
 
     const session = await repository.getSession(user.id);
     const pendingSubmissionId = Number(session.data.pendingSubmissionId ?? 0);
@@ -429,9 +436,9 @@ export class MaxBotService {
     const price = user.verified ? prices.verifiedPrice : prices.defaultPrice;
 
     const text = [
-      `Balance: ${formatRub(user.balanceRub)}`,
-      `Total acts created: ${user.actsCount}`,
-      `Current user price: ${formatRub(price)}`,
+      `Баланс: ${formatRub(user.balanceRub)}`,
+      `Всего создано актов: ${user.actsCount}`,
+      `Текущая цена для пользователя: ${formatRub(price)}`,
     ].join('\n');
 
     await this.bot.api.sendMessageToUser(maxUserId, text, {
@@ -449,7 +456,7 @@ export class MaxBotService {
     switch (session.state) {
       case 'manual_address': {
         if (!text) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Address must be non-empty.', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Адрес не может быть пустым.', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -462,14 +469,14 @@ export class MaxBotService {
         };
 
         await repository.setSession(user.id, 'manual_water_type', { draft });
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Choose water type:', {
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Выберите тип воды:', {
           attachments: [
             makeKeyboard([
               [
                 { text: 'ХВС', payload: CB.WATER_HVS },
                 { text: 'ГВС', payload: CB.WATER_GVS },
               ],
-              [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+              [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
             ]),
           ],
         });
@@ -478,7 +485,7 @@ export class MaxBotService {
 
       case 'manual_meter_model': {
         if (!text) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Meter model/type must be non-empty.', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Модель/тип счетчика не может быть пустой.', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -489,7 +496,7 @@ export class MaxBotService {
           meterModel: text,
         };
         await repository.setSession(user.id, 'manual_serial', { draft });
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Enter serial number:', {
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Введите серийный номер:', {
           attachments: [cancelKeyboard()],
         });
         return;
@@ -497,7 +504,7 @@ export class MaxBotService {
 
       case 'manual_serial': {
         if (!text) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Serial number must be non-empty.', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Серийный номер не может быть пустым.', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -508,7 +515,7 @@ export class MaxBotService {
           serialNumber: text,
         };
         await repository.setSession(user.id, 'manual_reading', { draft });
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Enter current reading (number, >= 0):', {
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Введите текущее показание (число, >= 0):', {
           attachments: [cancelKeyboard()],
         });
         return;
@@ -517,7 +524,7 @@ export class MaxBotService {
       case 'manual_reading': {
         const value = Number(text.replace(',', '.'));
         if (!Number.isFinite(value) || value < 0) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Current reading must be numeric and >= 0.', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Текущее показание должно быть числом и >= 0.', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -531,7 +538,7 @@ export class MaxBotService {
         await repository.setSession(user.id, 'manual_check_date', { draft });
         await this.bot.api.sendMessageToUser(
           user.maxUserId,
-          `Enter check date in format DD.MM.YYYY (today: ${todayDateString()}).`,
+          `Введите дату поверки в формате ДД.ММ.ГГГГ (сегодня: ${todayDateString()}).`,
           {
             attachments: [cancelKeyboard()],
           },
@@ -542,7 +549,7 @@ export class MaxBotService {
       case 'manual_check_date': {
         const parsed = parseDateOrNull(text);
         if (!parsed || isFutureDate(parsed)) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Check date must be valid and not in the future.', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Дата поверки должна быть корректной и не в будущем.', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -554,15 +561,15 @@ export class MaxBotService {
         };
 
         await repository.setSession(user.id, 'manual_interval', { draft });
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Choose inspection interval:', {
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Выберите межповерочный интервал:', {
           attachments: [
             makeKeyboard([
               [
-                { text: '4 years', payload: CB.INTERVAL_4 },
-                { text: '5 years', payload: CB.INTERVAL_5 },
-                { text: '6 years', payload: CB.INTERVAL_6 },
+                { text: '4 года', payload: CB.INTERVAL_4 },
+                { text: '5 лет', payload: CB.INTERVAL_5 },
+                { text: '6 лет', payload: CB.INTERVAL_6 },
               ],
-              [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+              [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
             ]),
           ],
         });
@@ -572,7 +579,7 @@ export class MaxBotService {
       case 'import_wait_submission_id': {
         const submissionId = Number(text);
         if (!Number.isFinite(submissionId) || submissionId <= 0) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Please send a valid submission ID.', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Отправьте корректный ID заявки.', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -585,7 +592,7 @@ export class MaxBotService {
       case 'import_check_date': {
         const parsed = parseDateOrNull(text);
         if (!parsed || isFutureDate(parsed)) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Check date must be valid and not in the future.', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Дата поверки должна быть корректной и не в будущем.', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -597,15 +604,15 @@ export class MaxBotService {
         };
 
         await repository.setSession(user.id, 'import_interval', { draft });
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Choose inspection interval:', {
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Выберите межповерочный интервал:', {
           attachments: [
             makeKeyboard([
               [
-                { text: '4 years', payload: CB.INTERVAL_4 },
-                { text: '5 years', payload: CB.INTERVAL_5 },
-                { text: '6 years', payload: CB.INTERVAL_6 },
+                { text: '4 года', payload: CB.INTERVAL_4 },
+                { text: '5 лет', payload: CB.INTERVAL_5 },
+                { text: '6 лет', payload: CB.INTERVAL_6 },
               ],
-              [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+              [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
             ]),
           ],
         });
@@ -616,7 +623,7 @@ export class MaxBotService {
         const normalized = text.trim();
         const valueRub = Number(normalized);
         if (!/^\d+$/.test(normalized) || !Number.isInteger(valueRub) || valueRub < 10) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Minimum top-up amount is 10 ₽ (whole rubles only).', {
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Минимальная сумма пополнения — 10 ₽ (только целые рубли).', {
             attachments: [cancelKeyboard()],
           });
           return;
@@ -647,7 +654,7 @@ export class MaxBotService {
           source: 'manual',
         },
       });
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Enter address:', {
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Введите адрес:', {
         attachments: [cancelKeyboard()],
       });
       return;
@@ -655,7 +662,7 @@ export class MaxBotService {
 
     if (payload === CB.MENU_IMPORT) {
       await repository.setSession(user.id, 'import_wait_submission_id', {});
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Send submission ID from external report bot:', {
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Отправьте ID заявки из внешнего бота отчетов:', {
         attachments: [cancelKeyboard()],
       });
       return;
@@ -682,7 +689,7 @@ export class MaxBotService {
         resumeState: session.state,
         resumeData: session.data,
       });
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Enter custom amount in RUB (minimum 10):', {
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Введите произвольную сумму в рублях (минимум 10):', {
         attachments: [cancelKeyboard()],
       });
       return;
@@ -699,7 +706,7 @@ export class MaxBotService {
       };
 
       await repository.setSession(user.id, 'manual_meter_model', { draft });
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Enter meter model/type:', {
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Введите модель/тип счетчика:', {
         attachments: [cancelKeyboard()],
       });
       return;
@@ -722,14 +729,14 @@ export class MaxBotService {
         await repository.setSession(user.id, 'import_result', { draft });
       }
 
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Choose result:', {
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Выберите результат:', {
         attachments: [
           makeKeyboard([
             [
-              { text: '? Fit', payload: CB.RESULT_FIT, intent: 'positive' },
-              { text: '? Unfit', payload: CB.RESULT_UNFIT, intent: 'negative' },
+              { text: '✅ Годен', payload: CB.RESULT_FIT, intent: 'positive' },
+              { text: '❌ Негоден', payload: CB.RESULT_UNFIT, intent: 'negative' },
             ],
-            [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+            [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
           ]),
         ],
       });
@@ -763,7 +770,7 @@ export class MaxBotService {
 
       await this.bot.api.sendMessageToUser(
         user.maxUserId,
-        `Enter check date in format DD.MM.YYYY (today: ${todayDateString()}).`,
+        `Введите дату поверки в формате ДД.ММ.ГГГГ (сегодня: ${todayDateString()}).`,
         {
           attachments: [cancelKeyboard()],
         },
@@ -788,31 +795,31 @@ export class MaxBotService {
 
     const checkDate = parseDateOrNull(draft.checkDate);
     if (!checkDate) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Could not recognize all required fields. Please try again.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
       return;
     }
 
     const validUntil = computeValidUntil(checkDate, draft.intervalYears);
 
     const lines = [
-      'Summary:',
-      `Address: ${draft.address}`,
-      `Water type: ${draft.waterType}`,
-      `Meter model: ${draft.meterModel}`,
-      `Serial number: ${draft.serialNumber}`,
-      `Current reading: ${draft.currentReading}`,
-      `Check date: ${draft.checkDate}`,
-      `Interval: ${draft.intervalYears} years`,
-      `Valid until: ${toDateView(validUntil)}`,
-      `Result: ${draft.result === 'fit' ? '? Fit' : '? Unfit'}`,
-      `Price: ${formatRub(price)}`,
+      'Сводка:',
+      `Адрес: ${draft.address}`,
+      `Тип воды: ${draft.waterType}`,
+      `Модель счетчика: ${draft.meterModel}`,
+      `Серийный номер: ${draft.serialNumber}`,
+      `Текущее показание: ${draft.currentReading}`,
+      `Дата поверки: ${draft.checkDate}`,
+      `Интервал: ${draft.intervalYears} лет`,
+      `Действителен до: ${toDateView(validUntil)}`,
+      `Результат: ${draft.result === 'fit' ? '✅ Годен' : '❌ Негоден'}`,
+      `Стоимость: ${formatRub(price)}`,
     ];
 
     await this.bot.api.sendMessageToUser(user.maxUserId, lines.join('\n'), {
       attachments: [
         makeKeyboard([
-          [{ text: price > 0 ? '? Confirm and pay' : '? Get act', payload: CB.DRAFT_CONFIRM, intent: 'positive' }],
-          [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+          [{ text: price > 0 ? '✅ Подтвердить и оплатить' : '✅ Получить акт', payload: CB.DRAFT_CONFIRM, intent: 'positive' }],
+          [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
     });
@@ -825,7 +832,7 @@ export class MaxBotService {
 
     const draftRaw = session.data.draft as Partial<ActDraft>;
     if (!validateDraft(draftRaw)) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Could not recognize all required fields. Please try again.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
       return;
     }
 
@@ -850,7 +857,7 @@ export class MaxBotService {
       });
 
       await repository.clearSession(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Act request accepted. Your document is queued for generation.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка на акт принята. Документ поставлен в очередь на генерацию.');
       await this.showMainMenu(user.maxUserId);
       return;
     }
@@ -894,7 +901,7 @@ export class MaxBotService {
         });
 
         await repository.clearSession(user.id);
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Act request accepted. Your document is queued for generation.');
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка на акт принята. Документ поставлен в очередь на генерацию.');
         await this.showMainMenu(user.maxUserId);
       } catch (error) {
         await repository.changeBalance(user.id, price);
@@ -908,12 +915,12 @@ export class MaxBotService {
       return;
     }
 
-    await this.bot.api.sendMessageToUser(user.maxUserId, 'Your balance is insufficient.', {
+    await this.bot.api.sendMessageToUser(user.maxUserId, 'Недостаточно средств на балансе.', {
       attachments: [
         makeKeyboard([
-          [{ text: 'One-time payment', payload: CB.INSUFFICIENT_ONE_TIME, intent: 'positive' }],
-          [{ text: 'Top up balance', payload: CB.INSUFFICIENT_TOPUP }],
-          [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+          [{ text: 'Разовый платеж', payload: CB.INSUFFICIENT_ONE_TIME, intent: 'positive' }],
+          [{ text: 'Пополнить баланс', payload: CB.INSUFFICIENT_TOPUP }],
+          [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
     });
@@ -926,7 +933,7 @@ export class MaxBotService {
 
     const draftRaw = session.data.draft as Partial<ActDraft>;
     if (!validateDraft(draftRaw)) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Could not recognize all required fields. Please try again.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
       return;
     }
 
@@ -967,20 +974,20 @@ export class MaxBotService {
     await repository.clearSession(user.id);
 
     const keyboard = yooPayment.confirmationUrl
-      ? Keyboard.inlineKeyboard([[Keyboard.button.link('Pay now', yooPayment.confirmationUrl)]])
+      ? Keyboard.inlineKeyboard([[Keyboard.button.link('Оплатить', yooPayment.confirmationUrl)]])
       : undefined;
 
     await this.bot.api.sendMessageToUser(
       user.maxUserId,
       yooPayment.confirmationUrl
-        ? `One-time payment created. Use the link: ${yooPayment.confirmationUrl}`
-        : 'One-time payment created.',
+        ? `Разовый платеж создан. Перейдите по ссылке: ${yooPayment.confirmationUrl}`
+        : 'Разовый платеж создан.',
       keyboard ? { attachments: [keyboard] } : undefined,
     );
   }
 
   private async showTopUpOptions(maxUserId: number): Promise<void> {
-    await this.bot.api.sendMessageToUser(maxUserId, 'Choose top-up amount:', {
+    await this.bot.api.sendMessageToUser(maxUserId, 'Выберите сумму пополнения:', {
       attachments: [
         makeKeyboard([
           [
@@ -988,8 +995,8 @@ export class MaxBotService {
             { text: '50 ₽', payload: CB.TOPUP_50 },
             { text: '100 ₽', payload: CB.TOPUP_100 },
           ],
-          [{ text: 'Other amount', payload: CB.TOPUP_OTHER }],
-          [{ text: 'Cancel', payload: CB.CANCEL, intent: 'negative' }],
+          [{ text: 'Другая сумма', payload: CB.TOPUP_OTHER }],
+          [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
     });
@@ -997,7 +1004,7 @@ export class MaxBotService {
 
   private async createTopUpPayment(user: BotUser, amountRub: number): Promise<void> {
     if (!Number.isInteger(amountRub) || amountRub < 10) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Minimum top-up amount is 10 ₽ (whole rubles only).');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Минимальная сумма пополнения — 10 ₽ (только целые рубли).');
       return;
     }
 
@@ -1021,14 +1028,14 @@ export class MaxBotService {
     await repository.setPaymentProviderData(payment.id, yooPayment.id, yooPayment.confirmationUrl);
 
     const keyboard = yooPayment.confirmationUrl
-      ? Keyboard.inlineKeyboard([[Keyboard.button.link('Pay now', yooPayment.confirmationUrl)]])
+      ? Keyboard.inlineKeyboard([[Keyboard.button.link('Оплатить', yooPayment.confirmationUrl)]])
       : undefined;
 
     await this.bot.api.sendMessageToUser(
       user.maxUserId,
       yooPayment.confirmationUrl
-        ? `Top-up payment created. Use the link: ${yooPayment.confirmationUrl}`
-        : 'Top-up payment created.',
+        ? `Платеж на пополнение создан. Перейдите по ссылке: ${yooPayment.confirmationUrl}`
+        : 'Платеж на пополнение создан.',
       keyboard ? { attachments: [keyboard] } : undefined,
     );
   }
@@ -1036,26 +1043,26 @@ export class MaxBotService {
     const result = await externalSubmissionService.loadSubmission(submissionId, user.maxUserId);
 
     if (result.kind === 'not_found') {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'The submission was not found or is no longer available.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка не найдена или больше недоступна.');
       return;
     }
 
     if (result.kind === 'access_denied') {
       await this.bot.api.sendMessageToUser(
         user.maxUserId,
-        'This submission belongs to another user and is unavailable.',
+        'Эта заявка принадлежит другому пользователю и недоступна.',
       );
       return;
     }
 
     if (result.kind === 'incomplete') {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Could not recognize all required fields. Please try again.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
       return;
     }
 
     if (!user.verified) {
       await repository.setUserVerified(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'User verified successfully via deep link.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Пользователь успешно верифицирован по deep-link.');
     }
 
     await repository.updateUserProfileFromExternal(user.id, result.data.userFullname, result.data.orgName);
@@ -1073,19 +1080,19 @@ export class MaxBotService {
     await repository.setSession(user.id, 'import_confirmation', { draft });
 
     const lines = [
-      'Imported data:',
-      `Address: ${result.data.address}`,
-      `Water type: ${result.data.waterType}`,
-      `Meter model/type: ${result.data.meterModel}`,
-      `Serial number: ${result.data.serialNumber}`,
-      `Current reading: ${result.data.currentReading}`,
+      'Импортированные данные:',
+      `Адрес: ${result.data.address}`,
+      `Тип воды: ${result.data.waterType}`,
+      `Модель/тип счетчика: ${result.data.meterModel}`,
+      `Серийный номер: ${result.data.serialNumber}`,
+      `Текущее показание: ${result.data.currentReading}`,
     ];
 
     await this.bot.api.sendMessageToUser(user.maxUserId, lines.join('\n'), {
       attachments: [
         makeKeyboard([
-          [{ text: '? Confirm', payload: CB.IMPORT_CONFIRM, intent: 'positive' }],
-          [{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }],
+          [{ text: '✅ Подтвердить', payload: CB.IMPORT_CONFIRM, intent: 'positive' }],
+          [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
         ]),
       ],
     });
@@ -1104,11 +1111,11 @@ export class MaxBotService {
     }
 
     if (!existing.length) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'No history entries found.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'История пуста.');
       return;
     }
 
-    await this.bot.api.sendMessageToUser(user.maxUserId, 'Recent acts:', {
+    await this.bot.api.sendMessageToUser(user.maxUserId, 'Последние акты:', {
       attachments: [
         makeKeyboard(
           existing.map((item) => [{ text: summarizeHistoryItem(item), payload: historyPayload(item.id) }]),
@@ -1120,17 +1127,17 @@ export class MaxBotService {
   private async sendHistoryFile(user: BotUser, actId: number): Promise<void> {
     const act = await repository.getActByIdForUser(actId, user.id);
     if (!act) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Act not found.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Акт не найден.');
       return;
     }
 
     if (!(await fileExists(act.pdfPath))) {
       await repository.deleteActById(act.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'History entry removed because file is missing.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Запись истории удалена, потому что файл отсутствует.');
       return;
     }
 
-    await sendFileToUser(this.bot.api, user.maxUserId, act.pdfPath, `Act #${act.actNumber}`);
+    await sendFileToUser(this.bot.api, user.maxUserId, act.pdfPath, `Акт №${act.actNumber}`);
   }
 
   private async handleAdminMessage(
@@ -1153,24 +1160,24 @@ export class MaxBotService {
 
     if (session.state === 'admin_broadcast_wait_text') {
       if (!text) {
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Broadcast text cannot be empty.');
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Текст рассылки не может быть пустым.');
         return;
       }
 
       await repository.clearSession(user.id);
       await this.broadcastText(text);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Broadcast sent.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Рассылка отправлена.');
       return;
     }
 
     if (!command) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, ADMIN_HELP_TEXT);
+      await this.sendAdminHelp(user.maxUserId);
       return;
     }
 
     switch (command.command) {
       case '/start': {
-        await this.bot.api.sendMessageToUser(user.maxUserId, ADMIN_HELP_TEXT);
+        await this.sendAdminHelp(user.maxUserId);
         return;
       }
 
@@ -1179,11 +1186,11 @@ export class MaxBotService {
         await this.bot.api.sendMessageToUser(
           user.maxUserId,
           [
-            `Users: ${stats.users}`,
-            `Acts: ${stats.acts}`,
-            `Revenue day: ${formatRub(stats.revenueDay)}`,
-            `Revenue month: ${formatRub(stats.revenueMonth)}`,
-            `Revenue total: ${formatRub(stats.revenueTotal)}`,
+            `Пользователи: ${stats.users}`,
+            `Акты: ${stats.acts}`,
+            `Выручка за день: ${formatRub(stats.revenueDay)}`,
+            `Выручка за месяц: ${formatRub(stats.revenueMonth)}`,
+            `Выручка всего: ${formatRub(stats.revenueTotal)}`,
           ].join('\n'),
         );
         return;
@@ -1192,48 +1199,48 @@ export class MaxBotService {
       case '/setprice': {
         const value = Number(command.args[0]);
         if (!Number.isInteger(value) || value < 0) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /setprice {rub}');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Использование: /setprice {rub}');
           return;
         }
 
         await repository.setPrice('ordinary', value);
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Default price updated successfully.');
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Цена для обычных пользователей успешно обновлена.');
         return;
       }
 
       case '/setprice_verified': {
         const value = Number(command.args[0]);
         if (!Number.isInteger(value) || value < 0) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /setprice_verified {rub}');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Использование: /setprice_verified {rub}');
           return;
         }
 
         await repository.setPrice('verified', value);
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Verified-user price updated successfully.');
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Цена для verified-пользователей успешно обновлена.');
         return;
       }
 
       case '/user': {
         const targetMaxId = Number(command.args[0]);
         if (!Number.isFinite(targetMaxId)) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /user {id}');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Использование: /user {id}');
           return;
         }
 
         const card = await repository.getUserCardByMaxId(targetMaxId);
         if (!card) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'User not found.');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Пользователь не найден.');
           return;
         }
 
         await this.bot.api.sendMessageToUser(
           user.maxUserId,
           [
-            `User MAX ID: ${card.user.maxUserId}`,
-            `Balance: ${formatRub(card.user.balanceRub)}`,
-            `Acts: ${card.user.actsCount}`,
-            `Payments: ${card.paymentsCount}`,
-            `User type: ${card.user.verified ? 'verified' : 'ordinary'}`,
+            `MAX ID пользователя: ${card.user.maxUserId}`,
+            `Баланс: ${formatRub(card.user.balanceRub)}`,
+            `Акты: ${card.user.actsCount}`,
+            `Платежи: ${card.paymentsCount}`,
+            `Тип пользователя: ${card.user.verified ? 'верифицированный' : 'обычный'}`,
           ].join('\n'),
         );
         return;
@@ -1243,19 +1250,19 @@ export class MaxBotService {
         const targetMaxId = Number(command.args[0]);
         const amount = Number(command.args[1]);
         if (!Number.isFinite(targetMaxId) || !Number.isInteger(amount) || amount <= 0) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /addbalance {user_id} {amount}');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Использование: /addbalance {user_id} {amount}');
           return;
         }
 
         const target = await repository.getUserByMaxId(targetMaxId);
         if (!target) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'User not found.');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Пользователь не найден.');
           return;
         }
 
         await repository.changeBalance(target.id, amount);
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Balance updated successfully.');
-        await this.bot.api.sendMessageToUser(target.maxUserId, `Your balance was changed by admin: ${formatRub(amount)}`);
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Баланс успешно обновлен.');
+        await this.bot.api.sendMessageToUser(target.maxUserId, `Ваш баланс изменен администратором: ${formatRub(amount)}`);
         return;
       }
 
@@ -1263,12 +1270,12 @@ export class MaxBotService {
         const textValue = command.args.join(' ').trim();
         if (textValue) {
           await this.broadcastText(textValue);
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Broadcast sent.');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Рассылка отправлена.');
           return;
         }
 
         await repository.setSession(user.id, 'admin_broadcast_wait_text', {});
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Send broadcast text:', {
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Отправьте текст рассылки:', {
           attachments: [cancelKeyboard()],
         });
         return;
@@ -1285,7 +1292,7 @@ export class MaxBotService {
       case '/refund': {
         const paymentArg = command.args[0];
         if (!paymentArg) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Usage: /refund {payment_id}');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Использование: /refund {payment_id}');
           return;
         }
 
@@ -1295,12 +1302,12 @@ export class MaxBotService {
           : await repository.getPaymentByProviderId(paymentArg);
 
         if (!payment) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Payment not found.');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'Платеж не найден.');
           return;
         }
 
         if (!payment.providerPaymentId) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Payment has no YooKassa provider ID.');
+          await this.bot.api.sendMessageToUser(user.maxUserId, 'У платежа нет идентификатора YooKassa.');
           return;
         }
 
@@ -1315,12 +1322,12 @@ export class MaxBotService {
           refund_status: refund.status,
         });
 
-        await this.bot.api.sendMessageToUser(user.maxUserId, `Refund result: ${refund.status} (id: ${refund.id})`);
+        await this.bot.api.sendMessageToUser(user.maxUserId, `Результат возврата: ${refund.status} (id: ${refund.id})`);
         return;
       }
 
       default:
-        await this.bot.api.sendMessageToUser(user.maxUserId, ADMIN_HELP_TEXT);
+        await this.sendAdminHelp(user.maxUserId);
     }
   }
 
@@ -1328,19 +1335,19 @@ export class MaxBotService {
     const attachments = ctx.message?.body?.attachments ?? [];
     const file = attachments.find((item) => item.type === 'file');
     if (!file || file.type !== 'file') {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Invalid file uploaded for offer. Please upload PDF.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Загружен неверный файл оферты. Загрузите PDF.');
       return;
     }
 
     const filename = (file as { filename?: string }).filename ?? '';
     if (!filename.toLowerCase().endsWith('.pdf')) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Invalid file uploaded for offer. Please upload PDF.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Загружен неверный файл оферты. Загрузите PDF.');
       return;
     }
 
     const sourceUrl = file.payload.url;
     if (!sourceUrl) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Invalid file uploaded for offer. Please upload PDF.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Загружен неверный файл оферты. Загрузите PDF.');
       return;
     }
 
@@ -1356,25 +1363,25 @@ export class MaxBotService {
       offerTempPath: tempPath,
     });
 
-    await this.bot.api.sendMessageToUser(user.maxUserId, 'Now send offer version string, for example: 4.1');
+    await this.bot.api.sendMessageToUser(user.maxUserId, 'Теперь отправьте строку версии оферты, например: 4.1');
   }
 
   private async finishNewOfferFlow(user: BotUser, text: string, session: UserSession): Promise<void> {
     const version = text.trim();
     if (!version) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Offer version must be non-empty.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Версия оферты не может быть пустой.');
       return;
     }
 
     const existing = await repository.getOfferByVersion(version);
     if (existing) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Duplicate offer version.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Такая версия оферты уже существует.');
       return;
     }
 
     const tempPath = String(session.data.offerTempPath ?? '');
     if (!tempPath || !(await fileExists(tempPath))) {
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Invalid file uploaded for offer. Please restart /new_oferta.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Загружен неверный файл оферты. Перезапустите /new_oferta.');
       await repository.clearSession(user.id);
       return;
     }
@@ -1386,7 +1393,8 @@ export class MaxBotService {
     await repository.createNewCurrentOffer(version, finalPath, user.maxUserId);
     await repository.clearSession(user.id);
 
-    await this.bot.api.sendMessageToUser(user.maxUserId, 'Offer updated successfully.');
+    await this.bot.api.sendMessageToUser(user.maxUserId, 'Оферта успешно обновлена.');
+    await this.sendAdminHelp(user.maxUserId);
 
     const users = await repository.listAllUsers();
     for (const target of users) {
@@ -1433,5 +1441,6 @@ export class MaxBotService {
 }
 
 export const maxBotService = new MaxBotService();
+
 
 
