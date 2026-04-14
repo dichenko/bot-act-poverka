@@ -214,22 +214,27 @@ export class MaxBotService {
     return { command, args };
   }
 
-  private extractSubmissionId(payload: string | null | undefined): number | null {
-    if (!payload) {
+  private extractSubmissionId(payload: string | null | undefined): string | null {
+    if (typeof payload !== 'string') {
       return null;
     }
 
-    const match = payload.match(/\d+/);
-    if (!match) {
+    const trimmed = payload.trim();
+    if (!trimmed) {
       return null;
     }
 
-    const value = Number(match[0]);
-    if (!Number.isFinite(value) || value <= 0) {
-      return null;
+    let decoded = trimmed;
+    try {
+      decoded = decodeURIComponent(trimmed);
+    } catch {
+      // keep raw payload when decode fails
     }
 
-    return value;
+    const idMatch = decoded.match(/(?:^|[?&\s])id=([^&\s]+)/i);
+    const value = idMatch?.[1] ?? decoded;
+    const submissionId = value.trim();
+    return submissionId || null;
   }
 
   private async sendAdminHelp(maxUserId: number): Promise<void> {
@@ -487,8 +492,15 @@ export class MaxBotService {
     await this.bot.api.sendMessageToUser(user.maxUserId, 'Оферта успешно принята.');
 
     const session = await repository.getSession(user.id);
-    const pendingSubmissionId = Number(session.data.pendingSubmissionId ?? 0);
-    if (Number.isFinite(pendingSubmissionId) && pendingSubmissionId > 0) {
+    const pendingSubmissionIdRaw = session.data.pendingSubmissionId;
+    const pendingSubmissionId =
+      typeof pendingSubmissionIdRaw === 'string'
+        ? pendingSubmissionIdRaw.trim()
+        : pendingSubmissionIdRaw == null
+          ? ''
+          : String(pendingSubmissionIdRaw).trim();
+
+    if (pendingSubmissionId) {
       logger.info(
         {
           userId: user.id,
@@ -682,8 +694,8 @@ export class MaxBotService {
       }
 
       case 'import_wait_submission_id': {
-        const submissionId = Number(text);
-        if (!Number.isFinite(submissionId) || submissionId <= 0) {
+        const submissionId = this.extractSubmissionId(text);
+        if (!submissionId) {
           await this.bot.api.sendMessageToUser(user.maxUserId, 'Отправьте корректный ID заявки.', {
             attachments: [cancelKeyboard()],
           });
@@ -1156,7 +1168,7 @@ export class MaxBotService {
   }
   private async runSubmissionImport(
     user: BotUser,
-    submissionId: number,
+    submissionId: string,
     source: 'deep_link' | 'offer_resume' | 'manual_input',
   ): Promise<void> {
     logger.info(

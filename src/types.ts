@@ -4,7 +4,7 @@ export type ActSource = 'manual' | 'submission';
 
 export type ActDraft = {
   source: ActSource;
-  submissionId?: number;
+  submissionId?: string;
   address: string;
   waterType: WaterType;
   meterModel: string;
@@ -78,7 +78,7 @@ export type UserSession = {
 };
 
 export type SubmissionImport = {
-  submissionId: number;
+  submissionId: string;
   externalUserId: number;
   address: string;
   serialNumber: string;

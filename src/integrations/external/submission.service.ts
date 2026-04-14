@@ -19,7 +19,7 @@ const pickFirstString = (source: Record<string, unknown>, keys: string[]): strin
 };
 
 export class ExternalSubmissionService {
-  async loadSubmission(submissionId: number, currentMaxUserId: number): Promise<ImportResult> {
+  async loadSubmission(submissionId: string, currentMaxUserId: number): Promise<ImportResult> {
     const { rows } = await externalPool.query(
       `
       SELECT
@@ -34,7 +34,7 @@ export class ExternalSubmissionService {
         production_year,
         custom_equipment_type_name
       FROM meter_submissions
-      WHERE id = $1
+      WHERE id::text = $1
       LIMIT 1
       `,
       [submissionId],
@@ -45,6 +45,12 @@ export class ExternalSubmissionService {
     }
 
     const submission = rows[0];
+    const resolvedSubmissionId =
+      submission.id == null
+        ? submissionId
+        : typeof submission.id === 'string'
+          ? submission.id
+          : String(submission.id);
     const ownerId = Number(submission.user_id);
     if (ownerId !== currentMaxUserId) {
       return { kind: 'access_denied' };
@@ -84,7 +90,7 @@ export class ExternalSubmissionService {
     return {
       kind: 'ok',
       data: {
-        submissionId,
+        submissionId: resolvedSubmissionId,
         externalUserId: ownerId,
         address,
         serialNumber,

@@ -532,7 +532,7 @@ export class Repository {
   async createAct(input: {
     userId: number;
     source: 'manual' | 'submission';
-    submissionId?: number;
+    submissionId?: string;
     draft: ActDraft;
     actNumber: string;
     validUntil: string;
