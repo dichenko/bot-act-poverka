@@ -37,8 +37,28 @@ export const sendFileToUser = async (api: Api, userId: number, filePath: string,
   });
 };
 
-export const summarizeHistoryItem = (item: { id: number; actNumber: string; createdAt: Date }): string => {
-  return `#${item.actNumber} (${format(item.createdAt, 'dd.MM.yyyy HH:mm')})`;
+const HISTORY_BUTTON_MAX_LENGTH = 64;
+
+const truncateAddress = (address: string, maxLength: number): string => {
+  const cleaned = address.replace(/\s+/g, ' ').trim();
+  if (!cleaned) {
+    return '';
+  }
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
+  if (maxLength <= 1) {
+    return '…';
+  }
+  return `${cleaned.slice(0, maxLength - 1)}…`;
+};
+
+export const summarizeHistoryItem = (item: { createdAt: Date; address: string }): string => {
+  const dateTime = format(item.createdAt, 'dd.MM.yyyy HH:mm');
+  const prefix = `${dateTime} • `;
+  const addressMaxLength = Math.max(0, HISTORY_BUTTON_MAX_LENGTH - prefix.length);
+  const address = truncateAddress(item.address, addressMaxLength);
+  return address ? `${prefix}${address}` : dateTime;
 };
 
 export const historyDownloadPayload = historyPayload;

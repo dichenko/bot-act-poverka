@@ -1129,7 +1129,7 @@ export class MaxBotService {
 
   private async showHistory(user: BotUser): Promise<void> {
     const acts = await repository.listActsByUser(user.id);
-    const existing: Array<{ id: number; actNumber: string; createdAt: Date; pdfPath: string }> = [];
+    const existing: Array<{ id: number; actNumber: string; createdAt: Date; pdfPath: string; address: string }> = [];
 
     for (const act of acts) {
       if (await fileExists(act.pdfPath)) {

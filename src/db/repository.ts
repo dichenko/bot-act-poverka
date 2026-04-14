@@ -602,10 +602,13 @@ export class Repository {
     return { id: Number(rows[0].id) };
   }
 
-  async listActsByUser(userId: number, limit = 15): Promise<Array<{ id: number; actNumber: string; createdAt: Date; pdfPath: string }>> {
+  async listActsByUser(
+    userId: number,
+    limit = 15,
+  ): Promise<Array<{ id: number; actNumber: string; createdAt: Date; pdfPath: string; address: string }>> {
     const { rows } = await pool.query(
       `
-      SELECT id, act_number, created_at, pdf_path
+      SELECT id, act_number, created_at, pdf_path, address
       FROM acts
       WHERE user_id = $1
       ORDER BY created_at DESC
@@ -619,6 +622,7 @@ export class Repository {
       actNumber: row.act_number,
       createdAt: row.created_at,
       pdfPath: row.pdf_path,
+      address: row.address,
     }));
   }
 
