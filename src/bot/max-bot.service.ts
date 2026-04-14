@@ -1276,7 +1276,7 @@ export class MaxBotService {
 
       case '/new_oferta': {
         await repository.setSession(user.id, 'admin_new_offer_wait_file', {});
-        await this.bot.api.sendMessageToUser(user.maxUserId, 'Upload new offer PDF file:', {
+        await this.bot.api.sendMessageToUser(user.maxUserId, 'Загрузите PDF-файл новой оферты:', {
           attachments: [cancelKeyboard()],
         });
         return;

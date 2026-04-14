@@ -26,7 +26,7 @@ export const menuKeyboard = (verified: boolean) => {
   return makeKeyboard(rows);
 };
 
-export const cancelKeyboard = () => makeKeyboard([[{ text: '? Cancel', payload: CB.CANCEL, intent: 'negative' }]]);
+export const cancelKeyboard = () => makeKeyboard([[{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }]]);
 
 export const sendFileToUser = async (api: Api, userId: number, filePath: string, caption?: string): Promise<void> => {
   const uploaded = await api.uploadFile({ source: filePath });
