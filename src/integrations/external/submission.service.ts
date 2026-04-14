@@ -56,17 +56,28 @@ export class ExternalSubmissionService {
       return { kind: 'access_denied' };
     }
 
-    let meterModel =
+    const customMeterModel =
       typeof submission.custom_equipment_type_name === 'string' && submission.custom_equipment_type_name.trim()
         ? submission.custom_equipment_type_name.trim()
         : null;
 
-    if (!meterModel && submission.equipment_type_id != null) {
+    const equipmentTypeIdRaw = submission.equipment_type_id;
+    const equipmentTypeId =
+      equipmentTypeIdRaw == null
+        ? null
+        : typeof equipmentTypeIdRaw === 'string'
+          ? equipmentTypeIdRaw.trim() || null
+          : String(equipmentTypeIdRaw).trim() || null;
+
+    let meterModel: string | null = null;
+    if (equipmentTypeId) {
       const equipment = await externalPool.query<{ name: string }>(
-        'SELECT name FROM equipment_types WHERE id = $1 LIMIT 1',
-        [submission.equipment_type_id],
+        'SELECT name FROM equipment_types WHERE id::text = $1 LIMIT 1',
+        [equipmentTypeId],
       );
       meterModel = equipment.rows[0]?.name?.trim() ?? null;
+    } else {
+      meterModel = customMeterModel;
     }
 
     const waterType = waterTypeToRu(String(submission.water_type ?? '')) as WaterType | null;
