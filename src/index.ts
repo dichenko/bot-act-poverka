@@ -23,7 +23,9 @@ app.get('/db-health', async (_req, res) => {
 });
 
 app.post(env.WEBHOOK_PATH, async (req, res) => {
-  const secret = req.header('x-webhook-secret');
+  // MAX sends webhook secret in X-Max-Bot-Api-Secret header.
+  // Keep x-webhook-secret as backward-compatible fallback for local/manual tests.
+  const secret = req.header('x-max-bot-api-secret') ?? req.header('x-webhook-secret');
   if (secret !== env.WEBHOOK_SECRET) {
     res.status(401).json({ ok: false });
     return;
