@@ -1317,6 +1317,7 @@ export class MaxBotService {
             `Стало: ${formatRub(balanceAfter)}`,
           ].join('\n'),
         );
+        await this.sendHomeScreen(target.maxUserId);
         return;
       }
 
