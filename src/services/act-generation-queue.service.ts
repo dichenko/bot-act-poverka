@@ -28,7 +28,7 @@ export class ActGenerationQueueService {
       `Ваш MAX ID: ${user.maxUserId}`,
       `Баланс: ${formatRub(user.balanceRub)}`,
       `Всего создано актов: ${user.actsCount}`,
-      `Текущая цена для пользователя: ${formatRub(price)}`,
+      `Цена акта: ${formatRub(price)}`,
     ].join('\n');
 
     await this.api.sendMessageToUser(maxUserId, text, {
