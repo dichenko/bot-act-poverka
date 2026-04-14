@@ -5,6 +5,10 @@ export const pool = new Pool({
   connectionString: env.DATABASE_URL,
 });
 
+pool.on('connect', (client) => {
+  void client.query(`SELECT set_config('TimeZone', $1, false)`, [env.APP_TIMEZONE]);
+});
+
 export const externalPool = new Pool({
   connectionString: env.EXTERNAL_DATABASE_URL,
 });

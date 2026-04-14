@@ -7,6 +7,8 @@
       - "127.0.0.1:3004:3000"
     env_file:
       - .env
+    environment:
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
     depends_on:
       postgres:
         condition: service_healthy
@@ -23,6 +25,8 @@
     command: sh -c "node dist/db/migrate.js && node dist/worker/index.js"
     env_file:
       - .env
+    environment:
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,6 +44,8 @@
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
+    command: ["postgres", "-c", "timezone=${APP_TIMEZONE:-Europe/Moscow}", "-c", "log_timezone=${APP_TIMEZONE:-Europe/Moscow}"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -60,6 +66,7 @@
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
       PGADMIN_LISTEN_PORT: 5050
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
     depends_on:
       postgres:
         condition: service_healthy

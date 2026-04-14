@@ -30,6 +30,7 @@ const envSchema = z.object({
   ACT_XLSX_STORAGE_DIR: z.string().default(path.resolve(process.cwd(), 'storage/acts/xlsx')),
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
   LIBREOFFICE_BIN: z.string().default('soffice'),
+  APP_TIMEZONE: z.string().default('Europe/Moscow'),
 
   YOOKASSA_SHOP_ID: z.string().min(1),
   YOOKASSA_SECRET_KEY: z.string().min(1),
