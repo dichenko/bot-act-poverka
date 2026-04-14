@@ -472,6 +472,13 @@ export class MaxBotService {
     });
   }
 
+  private dateInputKeyboard() {
+    return makeKeyboard([
+      [{ text: '📅 Сегодня', payload: CB.DATE_TODAY, intent: 'positive' }],
+      [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
+    ]);
+  }
+
   private async sendHelpContact(maxUserId: number): Promise<void> {
     await this.bot.api.sendMessageToUser(maxUserId, HELP_CONTACT_HTML_PLACEHOLDER, {
       format: 'html',
@@ -566,7 +573,7 @@ export class MaxBotService {
           user.maxUserId,
           `Введите дату поверки в формате ДД.ММ.ГГГГ (сегодня: ${todayDateString()}).`,
           {
-            attachments: [cancelKeyboard()],
+            attachments: [this.dateInputKeyboard()],
           },
         );
         return;
@@ -576,7 +583,7 @@ export class MaxBotService {
         const parsed = parseDateOrNull(text);
         if (!parsed || isFutureDate(parsed)) {
           await this.bot.api.sendMessageToUser(user.maxUserId, 'Дата поверки должна быть корректной и не в будущем.', {
-            attachments: [cancelKeyboard()],
+            attachments: [this.dateInputKeyboard()],
           });
           return;
         }
@@ -619,7 +626,7 @@ export class MaxBotService {
         const parsed = parseDateOrNull(text);
         if (!parsed || isFutureDate(parsed)) {
           await this.bot.api.sendMessageToUser(user.maxUserId, 'Дата поверки должна быть корректной и не в будущем.', {
-            attachments: [cancelKeyboard()],
+            attachments: [this.dateInputKeyboard()],
           });
           return;
         }
@@ -669,6 +676,15 @@ export class MaxBotService {
     }
   }
   private async handleCallbackByPayload(user: BotUser, payload: string, session: UserSession): Promise<void> {
+    if (payload === CB.DATE_TODAY) {
+      if (session.state !== 'manual_check_date' && session.state !== 'import_check_date') {
+        return;
+      }
+
+      await this.handleSessionText(user, todayDateString(), session);
+      return;
+    }
+
     if (payload === CB.MENU_HELP) {
       await this.sendHelpContact(user.maxUserId);
       return;
@@ -798,7 +814,7 @@ export class MaxBotService {
         user.maxUserId,
         `Введите дату поверки в формате ДД.ММ.ГГГГ (сегодня: ${todayDateString()}).`,
         {
-          attachments: [cancelKeyboard()],
+          attachments: [this.dateInputKeyboard()],
         },
       );
       return;

@@ -17,6 +17,7 @@
 
   RESULT_FIT: 'result_fit',
   RESULT_UNFIT: 'result_unfit',
+  DATE_TODAY: 'date_today',
 
   DRAFT_CONFIRM: 'draft_confirm',
   CONFIRM_DRAFT: 'draft_confirm',
