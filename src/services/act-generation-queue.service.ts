@@ -71,7 +71,6 @@ export class ActGenerationQueueService {
       }
 
       if (notifyUser && this.api) {
-        await this.api.sendMessageToUser(user.maxUserId, 'Акт успешно сформирован.');
         await sendFileToUser(this.api, user.maxUserId, act.pdfPath, `Акт №${act.actNumber}`);
         await this.sendHomeMenu(user.maxUserId);
       }

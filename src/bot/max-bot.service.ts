@@ -884,7 +884,6 @@ export class MaxBotService {
 
       await repository.clearSession(user.id);
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка на акт принята. Документ поставлен в очередь на генерацию.');
-      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -928,7 +927,6 @@ export class MaxBotService {
 
         await repository.clearSession(user.id);
         await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка на акт принята. Документ поставлен в очередь на генерацию.');
-        await this.sendHomeScreen(user.maxUserId);
       } catch (error) {
         await repository.changeBalance(user.id, price);
         await repository.updatePaymentStatusById(payment.id, 'failed');
