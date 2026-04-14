@@ -269,7 +269,7 @@ export class MaxBotService {
       return;
     }
 
-    await this.handleStart(user, ctx.startPayload ?? undefined);
+    await this.handleStart(user, ctx.startPayload ?? undefined, 'bot_started');
   }
 
   private async onMessage(ctx: Context): Promise<void> {
@@ -288,7 +288,7 @@ export class MaxBotService {
 
     if (command?.command === '/start') {
       const payload = command.args[0];
-      await this.handleStart(user, payload);
+      await this.handleStart(user, payload, 'message_start');
       return;
     }
 
@@ -377,18 +377,70 @@ export class MaxBotService {
     }
   }
 
-  private async handleStart(user: BotUser, payload?: string): Promise<void> {
+  private async handleStart(
+    user: BotUser,
+    payload: string | undefined,
+    source: 'bot_started' | 'message_start',
+  ): Promise<void> {
+    const hasPayload = typeof payload === 'string' && payload.trim().length > 0;
+    if (hasPayload) {
+      logger.info(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          source,
+          startPayload: payload,
+        },
+        'Deep-link payload received',
+      );
+    }
+
     const submissionId = this.extractSubmissionId(payload);
+    if (hasPayload) {
+      if (submissionId) {
+        logger.info(
+          {
+            userId: user.id,
+            maxUserId: user.maxUserId,
+            source,
+            submissionId,
+          },
+          'Deep-link payload parsed',
+        );
+      } else {
+        logger.warn(
+          {
+            userId: user.id,
+            maxUserId: user.maxUserId,
+            source,
+            startPayload: payload,
+          },
+          'Deep-link payload does not contain valid submission id',
+        );
+      }
+    }
 
     const offer = await repository.getCurrentOffer();
     if (offer && user.acceptedOfferVersion !== offer.version) {
+      if (submissionId) {
+        logger.info(
+          {
+            userId: user.id,
+            maxUserId: user.maxUserId,
+            source,
+            submissionId,
+            offerVersion: offer.version,
+          },
+          'Deep-link import postponed until offer acceptance',
+        );
+      }
       await repository.setSession(user.id, 'idle', submissionId ? { pendingSubmissionId: submissionId } : {});
       await this.sendOfferForAcceptance(user.maxUserId, offer.version, offer.filePath);
       return;
     }
 
     if (submissionId) {
-      await this.runSubmissionImport(user, submissionId);
+      await this.runSubmissionImport(user, submissionId, 'deep_link');
       return;
     }
 
@@ -437,10 +489,18 @@ export class MaxBotService {
     const session = await repository.getSession(user.id);
     const pendingSubmissionId = Number(session.data.pendingSubmissionId ?? 0);
     if (Number.isFinite(pendingSubmissionId) && pendingSubmissionId > 0) {
+      logger.info(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId: pendingSubmissionId,
+        },
+        'Resuming postponed deep-link import after offer acceptance',
+      );
       await repository.clearSession(user.id);
       const refreshed = await repository.getUserById(user.id);
       if (refreshed) {
-        await this.runSubmissionImport(refreshed, pendingSubmissionId);
+        await this.runSubmissionImport(refreshed, pendingSubmissionId, 'offer_resume');
         return;
       }
     }
@@ -630,7 +690,7 @@ export class MaxBotService {
           return;
         }
 
-        await this.runSubmissionImport(user, submissionId);
+        await this.runSubmissionImport(user, submissionId, 'manual_input');
         return;
       }
 
@@ -1094,16 +1154,50 @@ export class MaxBotService {
     );
     await this.sendHomeScreen(user.maxUserId);
   }
-  private async runSubmissionImport(user: BotUser, submissionId: number): Promise<void> {
+  private async runSubmissionImport(
+    user: BotUser,
+    submissionId: number,
+    source: 'deep_link' | 'offer_resume' | 'manual_input',
+  ): Promise<void> {
+    logger.info(
+      {
+        userId: user.id,
+        maxUserId: user.maxUserId,
+        submissionId,
+        source,
+      },
+      'Submission import started',
+    );
+
     const result = await externalSubmissionService.loadSubmission(submissionId, user.maxUserId);
 
     if (result.kind === 'not_found') {
+      logger.warn(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId,
+          source,
+          resultKind: result.kind,
+        },
+        'Submission import finished with not_found',
+      );
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка не найдена или больше недоступна.');
       await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
     if (result.kind === 'access_denied') {
+      logger.warn(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId,
+          source,
+          resultKind: result.kind,
+        },
+        'Submission import finished with access_denied',
+      );
       await this.bot.api.sendMessageToUser(
         user.maxUserId,
         'Эта заявка принадлежит другому пользователю и недоступна.',
@@ -1113,10 +1207,31 @@ export class MaxBotService {
     }
 
     if (result.kind === 'incomplete') {
+      logger.warn(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId,
+          source,
+          resultKind: result.kind,
+        },
+        'Submission import finished with incomplete',
+      );
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
       await this.sendHomeScreen(user.maxUserId);
       return;
     }
+
+    logger.info(
+      {
+        userId: user.id,
+        maxUserId: user.maxUserId,
+        submissionId,
+        source,
+        resultKind: result.kind,
+      },
+      'Submission import finished successfully',
+    );
 
     if (!user.verified) {
       await repository.setUserVerified(user.id);
