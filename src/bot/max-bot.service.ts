@@ -29,9 +29,6 @@ const ADMIN_HELP_TEXT = [
   '/new_oferta - загрузка новой оферты и запуск переакцепта',
 ].join('\n');
 
-const HELP_CONTACT_HTML_PLACEHOLDER =
-  '<b>HELP_PLACEHOLDER</b>\n<i>Здесь будет HTML-текст с контактами администратора.</i>';
-
 type IncomingIdentity = {
   maxUserId: number;
   name: string | null;
@@ -479,8 +476,23 @@ export class MaxBotService {
     ]);
   }
 
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   private async sendHelpContact(maxUserId: number): Promise<void> {
-    await this.bot.api.sendMessageToUser(maxUserId, HELP_CONTACT_HTML_PLACEHOLDER, {
+    const text = [
+      'Напишите в поддержку : <a href="max://user/91634403">Метрология ГК</a><br>',
+      'Или по телефону +7(937)-033-22-22<br>',
+      `Ваш MaxID: ${this.escapeHtml(String(maxUserId))}`,
+    ].join('\n');
+
+    await this.bot.api.sendMessageToUser(maxUserId, text, {
       format: 'html',
     });
   }
