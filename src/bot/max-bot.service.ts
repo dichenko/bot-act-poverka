@@ -231,9 +231,22 @@ export class MaxBotService {
       // keep raw payload when decode fails
     }
 
-    const idMatch = decoded.match(/(?:^|[?&\s])id=([^&\s]+)/i);
-    const value = idMatch?.[1] ?? decoded;
-    const submissionId = value.trim();
+    const queryPayload = decoded.startsWith('?') ? decoded.slice(1) : decoded;
+    if (queryPayload.includes('=') || queryPayload.includes('&')) {
+      const params = new URLSearchParams(queryPayload);
+      // Intentionally ignore generic `id` because upstream payload may contain
+      // submission_status_history.id; we need meter_submissions.id only.
+      const keys = ['submission_id', 'meter_submission_id', 'submissionId', 'meterSubmissionId'];
+      for (const key of keys) {
+        const value = params.get(key)?.trim();
+        if (value) {
+          return value;
+        }
+      }
+      return null;
+    }
+
+    const submissionId = decoded.trim();
     return submissionId || null;
   }
 

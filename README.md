@@ -1,7 +1,7 @@
 ﻿# MAX Act Generation Bot
 
 Production-oriented MAX messenger bot in TypeScript for generating water meter inspection acts (PDF), with PostgreSQL, pgAdmin, YooKassa payments, external DB import, admin tools, and webhook mode.
-
+## Tmp  docker compose exec bot npm run test:act:once:prod
 ## Implemented stack
 
 - TypeScript + Node.js
@@ -134,6 +134,10 @@ Used external tables:
 Ownership rule:
 - submission is accepted only when `meter_submissions.user_id == current MAX user ID`.
 
+Deep-link payload rule:
+- pass current `meter_submissions.id` (recommended key: `submission_id`).
+- generic `id` in query payload is ignored to avoid mixing with `submission_status_history.id`.
+
 Water type mapping:
 - `HVS` -> `ХВС`
 - `GVS` -> `ГВС`
@@ -181,4 +185,3 @@ Optional env overrides for test:
 
 - `TEST_MAX_USER_ID` (default: `990000001`)
 - `TEST_PRICE_RUB` (default: `0`)
-
