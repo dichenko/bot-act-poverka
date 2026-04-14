@@ -699,6 +699,7 @@ export class MaxBotService {
 
     if (payload === CB.MENU_HELP) {
       await this.sendHelpContact(user.maxUserId);
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
