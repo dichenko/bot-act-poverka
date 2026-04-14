@@ -1,12 +1,28 @@
-﻿import { Pool, PoolClient } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { env } from '../config/env';
 
-export const pool = new Pool({
-  connectionString: env.DATABASE_URL,
-});
+const withTimezoneOption = (connectionString: string): string => {
+  try {
+    const parsed = new URL(connectionString);
+    const timezoneOption = `-c TimeZone=${env.APP_TIMEZONE}`;
+    const existingOptions = parsed.searchParams.get('options');
+    if (!existingOptions) {
+      parsed.searchParams.set('options', timezoneOption);
+      return parsed.toString();
+    }
 
-pool.on('connect', (client) => {
-  void client.query(`SELECT set_config('TimeZone', $1, false)`, [env.APP_TIMEZONE]);
+    if (!existingOptions.includes('TimeZone=')) {
+      parsed.searchParams.set('options', `${existingOptions} ${timezoneOption}`);
+    }
+
+    return parsed.toString();
+  } catch {
+    return connectionString;
+  }
+};
+
+export const pool = new Pool({
+  connectionString: withTimezoneOption(env.DATABASE_URL),
 });
 
 export const externalPool = new Pool({
@@ -27,4 +43,3 @@ export const withTransaction = async <T>(fn: (client: PoolClient) => Promise<T>)
     client.release();
   }
 };
-
