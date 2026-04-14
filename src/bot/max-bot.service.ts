@@ -1311,7 +1311,7 @@ export class MaxBotService {
         await this.bot.api.sendMessageToUser(
           target.maxUserId,
           [
-            'Администратор пополнил ваш баланс.',
+            `Администратор добавил на ваш баланс ${amount} ₽`,
             `Было: ${formatRub(balanceBefore)}`,
             `Добавлено: ${formatRub(amount)}`,
             `Стало: ${formatRub(balanceAfter)}`,
