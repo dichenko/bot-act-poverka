@@ -1,8 +1,9 @@
 ﻿import type { Api } from '@maxhub/max-bot-api';
 import { repository } from '../db/repository';
 import { logger } from '../logger';
+import { menuKeyboard, sendFileToUser } from '../bot/ui';
+import { formatRub } from '../utils/format';
 import { actService, validateDraft } from './act.service';
-import { sendFileToUser } from '../bot/ui';
 
 type ProcessOptions = {
   notifyUser?: boolean;
@@ -10,6 +11,30 @@ type ProcessOptions = {
 
 export class ActGenerationQueueService {
   constructor(private readonly api?: Api) {}
+
+  private async sendHomeMenu(maxUserId: number): Promise<void> {
+    if (!this.api) {
+      return;
+    }
+
+    const user = await repository.getUserByMaxId(maxUserId);
+    if (!user) {
+      return;
+    }
+
+    const prices = await repository.getPrices();
+    const price = user.verified ? prices.verifiedPrice : prices.defaultPrice;
+    const text = [
+      `Ваш MAX ID: ${user.maxUserId}`,
+      `Баланс: ${formatRub(user.balanceRub)}`,
+      `Всего создано актов: ${user.actsCount}`,
+      `Текущая цена для пользователя: ${formatRub(price)}`,
+    ].join('\n');
+
+    await this.api.sendMessageToUser(maxUserId, text, {
+      attachments: [menuKeyboard(user.verified)],
+    });
+  }
 
   async processNext(options: ProcessOptions = {}): Promise<boolean> {
     const notifyUser = options.notifyUser ?? true;
@@ -46,8 +71,9 @@ export class ActGenerationQueueService {
       }
 
       if (notifyUser && this.api) {
-        await this.api.sendMessageToUser(user.maxUserId, 'Act created successfully.');
-        await sendFileToUser(this.api, user.maxUserId, act.pdfPath, `Act #${act.actNumber}`);
+        await this.api.sendMessageToUser(user.maxUserId, 'Акт успешно сформирован.');
+        await sendFileToUser(this.api, user.maxUserId, act.pdfPath, `Акт №${act.actNumber}`);
+        await this.sendHomeMenu(user.maxUserId);
       }
 
       logger.info({ jobId: job.id, actId: act.actId }, 'Act generation job completed');
@@ -64,8 +90,9 @@ export class ActGenerationQueueService {
       if (notifyUser && this.api && user) {
         await this.api.sendMessageToUser(
           user.maxUserId,
-          'Act generation failed. Administrator has been notified. Please try again later.',
+          'Не удалось сформировать акт. Администратор уведомлен. Попробуйте позже.',
         );
+        await this.sendHomeMenu(user.maxUserId);
       }
 
       logger.error({ error, jobId: job.id }, 'Act generation job failed');

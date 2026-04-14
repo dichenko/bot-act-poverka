@@ -107,6 +107,7 @@ export class MaxBotService {
             user.maxUserId,
             `Платеж успешно завершен. Баланс пополнен на ${formatRub(payment.amountRub)}.`,
           );
+          await this.sendHomeScreen(user.maxUserId);
         }
       }
 
@@ -130,6 +131,7 @@ export class MaxBotService {
         const draft = pendingAct.draft;
         if (!validateDraft(draft)) {
           await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
+          await this.sendHomeScreen(user.maxUserId);
           return;
         }
 
@@ -145,6 +147,7 @@ export class MaxBotService {
           user.maxUserId,
           'Платеж успешно завершен. Заявка на акт поставлена в очередь на генерацию.',
         );
+        await this.sendHomeScreen(user.maxUserId);
       }
     }
 
@@ -156,6 +159,7 @@ export class MaxBotService {
       const user = await repository.getUserById(payment.userId);
       if (user) {
         await this.bot.api.sendMessageToUser(user.maxUserId, 'Платеж не прошел.');
+        await this.sendHomeScreen(user.maxUserId);
       }
     }
   }
@@ -238,6 +242,25 @@ export class MaxBotService {
     await this.bot.api.sendMessageToUser(maxUserId, text);
   }
 
+  private async sendHomeScreen(maxUserId: number): Promise<void> {
+    const user = await repository.getUserByMaxId(maxUserId);
+    if (!user) {
+      return;
+    }
+
+    if (isAdmin(user.maxUserId)) {
+      await this.sendAdminHelp(user.maxUserId);
+      return;
+    }
+
+    const offerAllowed = await this.enforceOffer(user);
+    if (!offerAllowed) {
+      return;
+    }
+
+    await this.showMainMenu(user.maxUserId);
+  }
+
   private async onBotStarted(ctx: Context): Promise<void> {
     const user = await this.syncUser(ctx);
     if (!user) {
@@ -279,6 +302,7 @@ export class MaxBotService {
 
     if (command?.command === '/help') {
       await this.sendHelpContact(user.maxUserId);
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -288,7 +312,7 @@ export class MaxBotService {
       return;
     }
 
-    await this.showMainMenu(user.maxUserId);
+    await this.sendHomeScreen(user.maxUserId);
   }
 
   private async onCallback(ctx: Context): Promise<void> {
@@ -311,6 +335,7 @@ export class MaxBotService {
 
     if (payload === CB.DECLINE_OFFER) {
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Вы отказались от оферты. Основные функции заблокированы.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -333,7 +358,7 @@ export class MaxBotService {
     if (payload === CB.CANCEL) {
       await repository.clearSession(user.id);
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Операция отменена пользователем.');
-      await this.showMainMenu(user.maxUserId);
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -370,7 +395,7 @@ export class MaxBotService {
       return;
     }
 
-    await this.showMainMenu(user.maxUserId);
+    await this.sendHomeScreen(user.maxUserId);
   }
 
   private async enforceOffer(user: BotUser): Promise<boolean> {
@@ -423,7 +448,7 @@ export class MaxBotService {
       }
     }
 
-    await this.showMainMenu(user.maxUserId);
+    await this.sendHomeScreen(user.maxUserId);
   }
 
   private async showMainMenu(maxUserId: number): Promise<void> {
@@ -436,6 +461,7 @@ export class MaxBotService {
     const price = user.verified ? prices.verifiedPrice : prices.defaultPrice;
 
     const text = [
+      `Ваш MAX ID: ${user.maxUserId}`,
       `Баланс: ${formatRub(user.balanceRub)}`,
       `Всего создано актов: ${user.actsCount}`,
       `Текущая цена для пользователя: ${formatRub(price)}`,
@@ -858,7 +884,7 @@ export class MaxBotService {
 
       await repository.clearSession(user.id);
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка на акт принята. Документ поставлен в очередь на генерацию.');
-      await this.showMainMenu(user.maxUserId);
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -902,7 +928,7 @@ export class MaxBotService {
 
         await repository.clearSession(user.id);
         await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка на акт принята. Документ поставлен в очередь на генерацию.');
-        await this.showMainMenu(user.maxUserId);
+        await this.sendHomeScreen(user.maxUserId);
       } catch (error) {
         await repository.changeBalance(user.id, price);
         await repository.updatePaymentStatusById(payment.id, 'failed');
@@ -984,6 +1010,7 @@ export class MaxBotService {
         : 'Разовый платеж создан.',
       keyboard ? { attachments: [keyboard] } : undefined,
     );
+    await this.sendHomeScreen(user.maxUserId);
   }
 
   private async showTopUpOptions(maxUserId: number): Promise<void> {
@@ -1038,12 +1065,14 @@ export class MaxBotService {
         : 'Платеж на пополнение создан.',
       keyboard ? { attachments: [keyboard] } : undefined,
     );
+    await this.sendHomeScreen(user.maxUserId);
   }
   private async runSubmissionImport(user: BotUser, submissionId: number): Promise<void> {
     const result = await externalSubmissionService.loadSubmission(submissionId, user.maxUserId);
 
     if (result.kind === 'not_found') {
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка не найдена или больше недоступна.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -1052,11 +1081,13 @@ export class MaxBotService {
         user.maxUserId,
         'Эта заявка принадлежит другому пользователю и недоступна.',
       );
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
     if (result.kind === 'incomplete') {
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -1112,6 +1143,7 @@ export class MaxBotService {
 
     if (!existing.length) {
       await this.bot.api.sendMessageToUser(user.maxUserId, 'История пуста.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
@@ -1122,22 +1154,26 @@ export class MaxBotService {
         ),
       ],
     });
+    await this.sendHomeScreen(user.maxUserId);
   }
 
   private async sendHistoryFile(user: BotUser, actId: number): Promise<void> {
     const act = await repository.getActByIdForUser(actId, user.id);
     if (!act) {
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Акт не найден.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
     if (!(await fileExists(act.pdfPath))) {
       await repository.deleteActById(act.id);
       await this.bot.api.sendMessageToUser(user.maxUserId, 'Запись истории удалена, потому что файл отсутствует.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
     await sendFileToUser(this.bot.api, user.maxUserId, act.pdfPath, `Акт №${act.actNumber}`);
+    await this.sendHomeScreen(user.maxUserId);
   }
 
   private async handleAdminMessage(
@@ -1414,6 +1450,7 @@ export class MaxBotService {
     for (const user of users) {
       try {
         await this.bot.api.sendMessageToUser(user.maxUserId, text);
+        await this.sendHomeScreen(user.maxUserId);
       } catch (error) {
         logger.warn({ error, targetMaxUserId: user.maxUserId }, 'Broadcast send failed');
       }
