@@ -19,6 +19,7 @@ const replacePlaceholders = (template: string, values: Record<string, string>): 
 };
 
 const resultTemplatePrefix = (result: ActDraft['result']): string => (result === 'fit' ? '' : 'НЕ');
+const validUntilTemplateValue = (draft: ActDraft, validUntil: string): string => (draft.result === 'fit' ? validUntil : '');
 
 export class ActTemplateService {
   private buildMoscowTimestamp(): string {
@@ -206,7 +207,7 @@ export class ActTemplateService {
       current_reading: String(input.draft.currentReading),
       check_date: input.draft.checkDate,
       interval_years: String(input.draft.intervalYears),
-      valid_until: input.validUntil,
+      valid_until: validUntilTemplateValue(input.draft, input.validUntil),
       result: resultTemplatePrefix(input.draft.result),
       price_rub: String(input.priceRub),
       source: input.draft.source,
