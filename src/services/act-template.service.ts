@@ -18,7 +18,7 @@ const replacePlaceholders = (template: string, values: Record<string, string>): 
   return result;
 };
 
-const resultTemplatePrefix = (result: ActDraft['result']): string => (result === 'fit' ? '✅ ' : '❌ НЕ');
+const resultTemplatePrefix = (result: ActDraft['result']): string => (result === 'fit' ? '' : 'НЕ');
 
 export class ActTemplateService {
   private buildMoscowTimestamp(): string {
