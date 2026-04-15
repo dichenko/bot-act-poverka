@@ -19,6 +19,38 @@ const pickFirstString = (source: Record<string, unknown>, keys: string[]): strin
 };
 
 export class ExternalSubmissionService {
+  private usersLookupColumnCache: 'user_id' | 'id' | null | undefined;
+
+  private async resolveUsersLookupColumn(): Promise<'user_id' | 'id' | null> {
+    if (this.usersLookupColumnCache !== undefined) {
+      return this.usersLookupColumnCache;
+    }
+
+    const { rows } = await externalPool.query<{ column_name: string }>(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'users'
+        AND column_name IN ('user_id', 'id')
+      `,
+    );
+
+    const names = new Set(rows.map((row) => row.column_name));
+    if (names.has('user_id')) {
+      this.usersLookupColumnCache = 'user_id';
+      return this.usersLookupColumnCache;
+    }
+
+    if (names.has('id')) {
+      this.usersLookupColumnCache = 'id';
+      return this.usersLookupColumnCache;
+    }
+
+    this.usersLookupColumnCache = null;
+    return this.usersLookupColumnCache;
+  }
+
   async loadSubmission(submissionId: string, currentMaxUserId: number): Promise<ImportResult> {
     const { rows } = await externalPool.query(
       `
@@ -89,12 +121,16 @@ export class ExternalSubmissionService {
       return { kind: 'incomplete' };
     }
 
-    const userProfile = await externalPool.query<{ data: Record<string, unknown> }>(
-      'SELECT to_jsonb(u) AS data FROM users u WHERE id = $1 LIMIT 1',
-      [ownerId],
-    );
+    const usersLookupColumn = await this.resolveUsersLookupColumn();
+    let data: Record<string, unknown> = {};
+    if (usersLookupColumn) {
+      const userProfile = await externalPool.query<{ data: Record<string, unknown> }>(
+        `SELECT to_jsonb(u) AS data FROM users u WHERE ${usersLookupColumn}::text = $1 LIMIT 1`,
+        [String(ownerId)],
+      );
+      data = userProfile.rows[0]?.data ?? {};
+    }
 
-    const data = userProfile.rows[0]?.data ?? {};
     const userFullname = pickFirstString(data, ['full_name', 'fullname', 'user_fullname', 'name']);
     const orgName = pickFirstString(data, ['org_name', 'organization_name', 'company_name']);
 
