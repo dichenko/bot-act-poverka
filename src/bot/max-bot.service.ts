@@ -170,7 +170,14 @@ export class MaxBotService {
     try {
       await handler();
     } catch (error) {
-      logger.error({ error, update: ctx.update }, 'Handler failed');
+      logger.error(
+        {
+          err: error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          update: ctx.update,
+        },
+        'Handler failed',
+      );
       const userId = ctx.user?.user_id ?? ctx.callback?.user?.user_id;
       if (userId) {
         await this.bot.api.sendMessageToUser(userId, 'Внутренняя ошибка. Попробуйте позже.');
@@ -1275,30 +1282,50 @@ export class MaxBotService {
       amountRub,
     });
 
-    const yooPayment = await yooKassaClient.createPayment({
-      amountRub,
-      description: `Balance top-up for user ${user.maxUserId}`,
-      metadata: {
-        payment_kind: 'top_up',
-        internal_payment_id: String(payment.id),
-        user_id: String(user.id),
-      },
-    });
+    try {
+      const yooPayment = await yooKassaClient.createPayment({
+        amountRub,
+        description: `Balance top-up for user ${user.maxUserId}`,
+        metadata: {
+          payment_kind: 'top_up',
+          internal_payment_id: String(payment.id),
+          user_id: String(user.id),
+        },
+      });
 
-    await repository.setPaymentProviderData(payment.id, yooPayment.id, yooPayment.confirmationUrl);
+      await repository.setPaymentProviderData(payment.id, yooPayment.id, yooPayment.confirmationUrl);
 
-    const keyboard = yooPayment.confirmationUrl
-      ? Keyboard.inlineKeyboard([[Keyboard.button.link('💳 Оплатить', yooPayment.confirmationUrl)]])
-      : undefined;
+      const keyboard = yooPayment.confirmationUrl
+        ? Keyboard.inlineKeyboard([[Keyboard.button.link('💳 Оплатить', yooPayment.confirmationUrl)]])
+        : undefined;
 
-    await this.bot.api.sendMessageToUser(
-      user.maxUserId,
-      yooPayment.confirmationUrl
-        ? `Платеж на пополнение создан. Перейдите по ссылке: ${yooPayment.confirmationUrl}`
-        : 'Платеж на пополнение создан.',
-      keyboard ? { attachments: [keyboard] } : undefined,
-    );
-    await this.sendHomeScreen(user.maxUserId);
+      await this.bot.api.sendMessageToUser(
+        user.maxUserId,
+        yooPayment.confirmationUrl
+          ? `Платеж на пополнение создан. Перейдите по ссылке: ${yooPayment.confirmationUrl}`
+          : 'Платеж на пополнение создан.',
+        keyboard ? { attachments: [keyboard] } : undefined,
+      );
+      await this.sendHomeScreen(user.maxUserId);
+    } catch (error) {
+      await repository.updatePaymentStatusById(payment.id, 'failed', {
+        reason: 'top_up_create_payment_failed',
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+      logger.error(
+        {
+          err: error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          amountRub,
+          paymentId: payment.id,
+        },
+        'Top-up payment creation failed',
+      );
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось создать платеж на пополнение. Попробуйте позже.');
+      await this.sendHomeScreen(user.maxUserId);
+    }
   }
   private async runSubmissionImport(
     user: BotUser,
