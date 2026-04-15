@@ -36,6 +36,8 @@ const envSchema = z.object({
   YOOKASSA_SECRET_KEY: z.string().min(1),
   YOOKASSA_RETURN_URL: z.string().url(),
   YOOKASSA_WEBHOOK_PATH: z.string().default('/webhooks/yookassa'),
+  YOOKASSA_RECEIPT_EMAIL: z.string().email().default('noreply@example.com'),
+  YOOKASSA_RECEIPT_VAT_CODE: z.coerce.number().int().min(1).max(6).default(1),
 
   PGADMIN_DEFAULT_EMAIL: z.string().email().default('admin@example.com'),
   PGADMIN_DEFAULT_PASSWORD: z.string().min(8).default('ChangeMe123!'),

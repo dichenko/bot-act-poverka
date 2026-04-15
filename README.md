@@ -87,6 +87,8 @@ cp .env.example .env
 - `YOOKASSA_SHOP_ID`
 - `YOOKASSA_SECRET_KEY`
 - `YOOKASSA_RETURN_URL`
+- `YOOKASSA_RECEIPT_EMAIL`
+- `YOOKASSA_RECEIPT_VAT_CODE` (`1..6`, usually `1` for "без НДС")
 - `ADMIN_MAX_IDS`
 - domains: `BOT_DOMAIN`, `PGADMIN_DOMAIN`, `DB_DOMAIN`
 

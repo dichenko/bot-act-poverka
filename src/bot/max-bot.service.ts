@@ -1227,6 +1227,8 @@ export class MaxBotService {
     const yooPayment = await yooKassaClient.createPayment({
       amountRub: price,
       description: `One-time act payment for user ${user.maxUserId}`,
+      receiptDescription: 'Услуга по формированию акта поверки',
+      receiptPaymentSubject: 'service',
       metadata: {
         payment_kind: 'one_time',
         internal_payment_id: String(payment.id),
@@ -1286,6 +1288,8 @@ export class MaxBotService {
       const yooPayment = await yooKassaClient.createPayment({
         amountRub,
         description: `Balance top-up for user ${user.maxUserId}`,
+        receiptDescription: 'Пополнение баланса',
+        receiptPaymentSubject: 'payment',
         metadata: {
           payment_kind: 'top_up',
           internal_payment_id: String(payment.id),

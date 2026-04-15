@@ -11,6 +11,8 @@ export type YooPayment = {
   confirmationUrl: string | null;
 };
 
+type YooReceiptPaymentSubject = 'service' | 'payment';
+
 export type YooWebhookEvent = {
   event: string;
   object: {
@@ -24,6 +26,33 @@ export type YooWebhookEvent = {
     metadata?: Record<string, unknown>;
   };
 };
+
+const truncateReceiptDescription = (value: string): string => {
+  const normalized = value.trim();
+  if (!normalized) {
+    return 'Оплата';
+  }
+  return normalized.length <= 128 ? normalized : normalized.slice(0, 128);
+};
+
+const buildReceipt = (amountValue: string, description: string, paymentSubject: YooReceiptPaymentSubject) => ({
+  customer: {
+    email: env.YOOKASSA_RECEIPT_EMAIL,
+  },
+  items: [
+    {
+      description: truncateReceiptDescription(description),
+      quantity: '1.00',
+      amount: {
+        value: amountValue,
+        currency: 'RUB',
+      },
+      vat_code: env.YOOKASSA_RECEIPT_VAT_CODE,
+      payment_mode: 'full_payment',
+      payment_subject: paymentSubject,
+    },
+  ],
+});
 
 const request = async <T>(path: string, method: 'POST', body: unknown): Promise<T> => {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -49,6 +78,8 @@ export class YooKassaClient {
     amountRub: number;
     description: string;
     metadata: Record<string, string>;
+    receiptDescription?: string;
+    receiptPaymentSubject?: YooReceiptPaymentSubject;
   }): Promise<YooPayment> {
     const value = params.amountRub.toFixed(2);
     const payload = {
@@ -63,6 +94,11 @@ export class YooKassaClient {
       },
       description: params.description,
       metadata: params.metadata,
+      receipt: buildReceipt(
+        value,
+        params.receiptDescription ?? params.description,
+        params.receiptPaymentSubject ?? 'service',
+      ),
     };
 
     const response = await request<{
