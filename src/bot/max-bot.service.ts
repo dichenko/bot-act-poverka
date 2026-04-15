@@ -259,15 +259,52 @@ export class MaxBotService {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  private extractLabeledValue(text: string, labels: string[]): string | null {
-    for (const label of labels) {
-      const pattern = new RegExp(`(?:^|\\n)\\s*${this.escapeRegexPattern(label)}\\s*:\\s*([^\\n]+)`, 'i');
-      const matched = text.match(pattern)?.[1]?.trim();
-      if (matched) {
-        return matched;
+  private extractLabeledValues(
+    text: string,
+    fields: Array<{ key: string; labels: string[] }>,
+  ): Record<string, string> {
+    const normalized = text.replace(/\r\n?/g, '\n');
+    const labelEntries = fields.flatMap((field) =>
+      field.labels.map((label) => ({ key: field.key, label, normalizedLabel: label.toLocaleLowerCase('ru-RU') })),
+    );
+    const pattern = new RegExp(
+      `(${labelEntries
+        .map((item) => this.escapeRegexPattern(item.label))
+        .sort((a, b) => b.length - a.length)
+        .join('|')})\\s*:`,
+      'giu',
+    );
+
+    const found: Array<{ key: string; start: number; valueStart: number }> = [];
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(normalized)) !== null) {
+      const rawLabel = match[1]?.toLocaleLowerCase('ru-RU');
+      if (!rawLabel) {
+        continue;
       }
+      const entry = labelEntries.find((item) => item.normalizedLabel === rawLabel);
+      if (!entry) {
+        continue;
+      }
+      found.push({
+        key: entry.key,
+        start: match.index,
+        valueStart: pattern.lastIndex,
+      });
     }
-    return null;
+
+    const values: Record<string, string> = {};
+    for (let i = 0; i < found.length; i += 1) {
+      const current = found[i];
+      const next = found[i + 1];
+      const rawValue = normalized.slice(current.valueStart, next ? next.start : normalized.length).trim();
+      if (!rawValue || values[current.key]) {
+        continue;
+      }
+      values[current.key] = rawValue;
+    }
+
+    return values;
   }
 
   private parseReadingValue(raw: string): number | null {
@@ -284,12 +321,21 @@ export class MaxBotService {
   }
 
   private parsePastedSubmissionDraft(text: string): PastedSubmissionDraft | null {
-    const normalized = text.replace(/\r\n?/g, '\n');
-    const address = this.extractLabeledValue(normalized, ['Адрес']);
-    const waterTypeRaw = this.extractLabeledValue(normalized, ['Тип воды']);
-    const meterModel = this.extractLabeledValue(normalized, ['Тип счетчика', 'Модель/тип счетчика', 'Модель счетчика']);
-    const serialNumber = this.extractLabeledValue(normalized, ['Заводской номер', 'Серийный номер']);
-    const readingRaw = this.extractLabeledValue(normalized, ['Показания', 'Текущее показание']);
+    const values = this.extractLabeledValues(text, [
+      { key: 'address', labels: ['Адрес'] },
+      { key: 'phoneIgnored', labels: ['Телефон'] },
+      { key: 'waterTypeRaw', labels: ['Тип воды'] },
+      { key: 'meterModel', labels: ['Тип счетчика', 'Тип счётчика', 'Модель/тип счетчика', 'Модель счетчика'] },
+      { key: 'serialNumber', labels: ['Заводской номер', 'Серийный номер'] },
+      { key: 'productionYearIgnored', labels: ['Год выпуска'] },
+      { key: 'readingRaw', labels: ['Показания', 'Текущее показание'] },
+    ]);
+
+    const address = values.address;
+    const waterTypeRaw = values.waterTypeRaw;
+    const meterModel = values.meterModel;
+    const serialNumber = values.serialNumber;
+    const readingRaw = values.readingRaw;
 
     const waterType = waterTypeRaw ? waterTypeToRu(waterTypeRaw) : null;
     const currentReading = readingRaw ? this.parseReadingValue(readingRaw) : null;
@@ -877,26 +923,9 @@ export class MaxBotService {
 
     if (payload === CB.MENU_IMPORT) {
       await repository.setSession(user.id, 'import_wait_submission_id', {});
-      await this.bot.api.sendMessageToUser(
-        user.maxUserId,
-        [
-          'Вставьте данные заявки текстом.',
-          'Обязательные поля:',
-          'Адрес, Тип воды, Тип счетчика, Заводской номер, Показания.',
-          '',
-          'Пример:',
-          'Адрес: 222222222',
-          'Телефон: +72222222222',
-          'Тип воды: ГВС',
-          'Тип счетчика: МЕТЕР СВ-15',
-          'Заводской номер: 222-222-2-2-2',
-          'Год выпуска: 2022',
-          'Показания: 222.2',
-        ].join('\n'),
-        {
-          attachments: [cancelKeyboard()],
-        },
-      );
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Вставьте данные из бота Отчет', {
+        attachments: [cancelKeyboard()],
+      });
       return;
     }
 
