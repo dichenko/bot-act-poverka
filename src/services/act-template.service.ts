@@ -5,7 +5,6 @@ import ExcelJS from 'exceljs';
 import { randomUUID } from 'node:crypto';
 import { env } from '../config/env';
 import type { ActDraft, BotUser } from '../types';
-import { boolResultToText } from '../utils/format';
 import { ensureDir, fileExists } from '../utils/fs';
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -18,6 +17,8 @@ const replacePlaceholders = (template: string, values: Record<string, string>): 
   }
   return result;
 };
+
+const resultTemplatePrefix = (result: ActDraft['result']): string => (result === 'fit' ? '✅ ' : '❌ НЕ');
 
 export class ActTemplateService {
   private buildMoscowTimestamp(): string {
@@ -206,7 +207,7 @@ export class ActTemplateService {
       check_date: input.draft.checkDate,
       interval_years: String(input.draft.intervalYears),
       valid_until: input.validUntil,
-      result: boolResultToText(input.draft.result),
+      result: resultTemplatePrefix(input.draft.result),
       price_rub: String(input.priceRub),
       source: input.draft.source,
       submission_id: input.draft.submissionId != null ? String(input.draft.submissionId) : '',
