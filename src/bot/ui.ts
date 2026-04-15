@@ -16,7 +16,7 @@ export const makeKeyboard = (rows: Array<Array<{ text: string; payload: string; 
 export const menuKeyboard = (verified: boolean) => {
   const rows: Array<Array<{ text: string; payload: string }>> = [];
   if (verified) {
-    rows.push([{ text: '📥 Создать акт по заявке', payload: CB.MENU_IMPORT }]);
+    rows.push([{ text: '📋 Вставить данные', payload: CB.MENU_IMPORT }]);
   }
   rows.push([{ text: '📝 Ввести вручную', payload: CB.MENU_MANUAL }]);
   rows.push([{ text: '💳 Пополнить баланс', payload: CB.MENU_TOPUP }]);

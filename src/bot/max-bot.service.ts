@@ -9,7 +9,7 @@ import { logger } from '../logger';
 import { validateDraft } from '../services/act.service';
 import type { ActDraft, BotUser, UserSession } from '../types';
 import { computeValidUntil, isFutureDate, parseDateOrNull, toDateView, todayDateString } from '../utils/dates';
-import { formatRub } from '../utils/format';
+import { formatRub, waterTypeToRu } from '../utils/format';
 import { CB, historyPayload } from './callbacks';
 import { cancelKeyboard, makeKeyboard, menuKeyboard, sendFileToUser, summarizeHistoryItem } from './ui';
 import { fileExists } from '../utils/fs';
@@ -34,6 +34,11 @@ type IncomingIdentity = {
   name: string | null;
   username: string | null;
 };
+
+type PastedSubmissionDraft = Pick<
+  ActDraft,
+  'source' | 'address' | 'waterType' | 'meterModel' | 'serialNumber' | 'currentReading'
+>;
 
 export class MaxBotService {
   readonly bot: Bot;
@@ -248,6 +253,59 @@ export class MaxBotService {
 
     const submissionId = decoded.trim();
     return submissionId || null;
+  }
+
+  private escapeRegexPattern(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  private extractLabeledValue(text: string, labels: string[]): string | null {
+    for (const label of labels) {
+      const pattern = new RegExp(`(?:^|\\n)\\s*${this.escapeRegexPattern(label)}\\s*:\\s*([^\\n]+)`, 'i');
+      const matched = text.match(pattern)?.[1]?.trim();
+      if (matched) {
+        return matched;
+      }
+    }
+    return null;
+  }
+
+  private parseReadingValue(raw: string): number | null {
+    const normalized = raw.replace(/\s+/g, '').replace(',', '.');
+    const matched = normalized.match(/^-?\d+(?:\.\d+)?/);
+    if (!matched) {
+      return null;
+    }
+    const value = Number(matched[0]);
+    if (!Number.isFinite(value) || value < 0) {
+      return null;
+    }
+    return value;
+  }
+
+  private parsePastedSubmissionDraft(text: string): PastedSubmissionDraft | null {
+    const normalized = text.replace(/\r\n?/g, '\n');
+    const address = this.extractLabeledValue(normalized, ['Адрес']);
+    const waterTypeRaw = this.extractLabeledValue(normalized, ['Тип воды']);
+    const meterModel = this.extractLabeledValue(normalized, ['Тип счетчика', 'Модель/тип счетчика', 'Модель счетчика']);
+    const serialNumber = this.extractLabeledValue(normalized, ['Заводской номер', 'Серийный номер']);
+    const readingRaw = this.extractLabeledValue(normalized, ['Показания', 'Текущее показание']);
+
+    const waterType = waterTypeRaw ? waterTypeToRu(waterTypeRaw) : null;
+    const currentReading = readingRaw ? this.parseReadingValue(readingRaw) : null;
+
+    if (!address || !waterType || !meterModel || !serialNumber || currentReading == null) {
+      return null;
+    }
+
+    return {
+      source: 'submission',
+      address,
+      waterType,
+      meterModel,
+      serialNumber,
+      currentReading,
+    };
   }
 
   private async sendAdminHelp(maxUserId: number): Promise<void> {
@@ -707,15 +765,32 @@ export class MaxBotService {
       }
 
       case 'import_wait_submission_id': {
-        const submissionId = this.extractSubmissionId(text);
-        if (!submissionId) {
-          await this.bot.api.sendMessageToUser(user.maxUserId, 'Отправьте корректный ID заявки.', {
-            attachments: [cancelKeyboard()],
-          });
+        const draft = this.parsePastedSubmissionDraft(text);
+        if (!draft) {
+          await this.bot.api.sendMessageToUser(
+            user.maxUserId,
+            'Не удалось распознать данные. Вставьте текст с полями: Адрес, Тип воды, Тип счетчика, Заводской номер, Показания.',
+            {
+              attachments: [cancelKeyboard()],
+            },
+          );
           return;
         }
 
-        await this.runSubmissionImport(user, submissionId, 'manual_input');
+        await repository.setSession(user.id, 'import_check_date', { draft });
+        const lines = [
+          'Данные приняты:',
+          `Адрес: ${draft.address}`,
+          `Тип воды: ${draft.waterType}`,
+          `Модель/тип счетчика: ${draft.meterModel}`,
+          `Серийный номер: ${draft.serialNumber}`,
+          `Текущее показание: ${draft.currentReading}`,
+          '',
+          `Введите дату поверки в формате ДД.ММ.ГГГГ (сегодня: ${todayDateString()}).`,
+        ];
+        await this.bot.api.sendMessageToUser(user.maxUserId, lines.join('\n'), {
+          attachments: [this.dateInputKeyboard()],
+        });
         return;
       }
 
@@ -802,9 +877,26 @@ export class MaxBotService {
 
     if (payload === CB.MENU_IMPORT) {
       await repository.setSession(user.id, 'import_wait_submission_id', {});
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Отправьте ID заявки из внешнего бота отчетов:', {
-        attachments: [cancelKeyboard()],
-      });
+      await this.bot.api.sendMessageToUser(
+        user.maxUserId,
+        [
+          'Вставьте данные заявки текстом.',
+          'Обязательные поля:',
+          'Адрес, Тип воды, Тип счетчика, Заводской номер, Показания.',
+          '',
+          'Пример:',
+          'Адрес: 222222222',
+          'Телефон: +72222222222',
+          'Тип воды: ГВС',
+          'Тип счетчика: МЕТЕР СВ-15',
+          'Заводской номер: 222-222-2-2-2',
+          'Год выпуска: 2022',
+          'Показания: 222.2',
+        ].join('\n'),
+        {
+          attachments: [cancelKeyboard()],
+        },
+      );
       return;
     }
 
@@ -1260,7 +1352,7 @@ export class MaxBotService {
 
     if (!user.verified) {
       await repository.setUserVerified(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Пользователь успешно верифицирован по deep-link.');
+      await this.bot.api.sendMessageToUser(user.maxUserId, '✅ Верифицированный пользователь');
     }
 
     await repository.updateUserProfileFromExternal(user.id, result.data.userFullname, result.data.orgName);
