@@ -7,7 +7,7 @@ import { externalSubmissionService } from '../integrations/external/submission.s
 import { yooKassaClient, YooWebhookEvent } from '../integrations/yookassa/client';
 import { logger } from '../logger';
 import { validateDraft } from '../services/act.service';
-import type { ActDraft, BotUser, UserSession } from '../types';
+import type { ActDraft, BotUser, SubmissionImport, UserSession } from '../types';
 import { computeValidUntil, isFutureDate, parseDateOrNull, toDateView, todayDateString } from '../utils/dates';
 import { formatRub, waterTypeToRu } from '../utils/format';
 import { CB, historyPayload } from './callbacks';
@@ -42,6 +42,11 @@ type AccessResolveOptions = {
 type PastedSubmissionDraft = Pick<
   ActDraft,
   'source' | 'address' | 'waterType' | 'meterModel' | 'serialNumber' | 'currentReading'
+>;
+
+type ImportedSubmissionDraft = Pick<
+  ActDraft,
+  'source' | 'submissionId' | 'address' | 'waterType' | 'meterModel' | 'serialNumber' | 'currentReading'
 >;
 
 export class MaxBotService {
@@ -610,6 +615,175 @@ export class MaxBotService {
     }
   }
 
+  private toImportedSubmissionDraft(data: SubmissionImport): ImportedSubmissionDraft {
+    return {
+      source: 'submission',
+      submissionId: data.submissionId,
+      address: data.address,
+      waterType: data.waterType,
+      meterModel: data.meterModel,
+      serialNumber: data.serialNumber,
+      currentReading: data.currentReading,
+    };
+  }
+
+  private isImportedSubmissionDraft(value: unknown): value is ImportedSubmissionDraft {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const draft = value as Record<string, unknown>;
+    if (draft.source !== 'submission') {
+      return false;
+    }
+
+    if (typeof draft.address !== 'string' || !draft.address.trim()) {
+      return false;
+    }
+
+    if (draft.waterType !== 'ХВС' && draft.waterType !== 'ГВС') {
+      return false;
+    }
+
+    if (typeof draft.meterModel !== 'string' || !draft.meterModel.trim()) {
+      return false;
+    }
+
+    if (typeof draft.serialNumber !== 'string' || !draft.serialNumber.trim()) {
+      return false;
+    }
+
+    if (typeof draft.currentReading !== 'number' || !Number.isFinite(draft.currentReading) || draft.currentReading < 0) {
+      return false;
+    }
+
+    if (draft.submissionId != null && typeof draft.submissionId !== 'string') {
+      return false;
+    }
+
+    return true;
+  }
+
+  private async sendImportConfirmation(user: BotUser, draft: ImportedSubmissionDraft): Promise<void> {
+    await repository.setSession(user.id, 'import_confirmation', { draft });
+
+    const lines = [
+      'Импортированные данные:',
+      `Адрес: ${draft.address}`,
+      `Тип воды: ${draft.waterType}`,
+      `Модель/тип счетчика: ${draft.meterModel}`,
+      `Серийный номер: ${draft.serialNumber}`,
+      `Текущее показание: ${draft.currentReading}`,
+    ];
+
+    await this.bot.api.sendMessageToUser(user.maxUserId, lines.join('\n'), {
+      attachments: [
+        makeKeyboard([
+          [{ text: '✅ Подтвердить', payload: CB.IMPORT_CONFIRM, intent: 'positive' }],
+          [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
+        ]),
+      ],
+    });
+  }
+
+  private async loadSubmissionDraftForUser(
+    user: BotUser,
+    submissionId: string,
+    source: 'deep_link' | 'offer_resume' | 'manual_input',
+    options: { sendHomeOnFailure?: boolean } = {},
+  ): Promise<ImportedSubmissionDraft | null> {
+    const sendHomeOnFailure = options.sendHomeOnFailure ?? true;
+
+    logger.info(
+      {
+        userId: user.id,
+        maxUserId: user.maxUserId,
+        submissionId,
+        source,
+      },
+      'Submission import started',
+    );
+
+    const result = await externalSubmissionService.loadSubmission(submissionId, user.maxUserId);
+
+    if (result.kind === 'not_found') {
+      logger.warn(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId,
+          source,
+          resultKind: result.kind,
+        },
+        'Submission import finished with not_found',
+      );
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка не найдена или больше недоступна.');
+      if (sendHomeOnFailure) {
+        await this.sendHomeScreen(user.maxUserId);
+      }
+      return null;
+    }
+
+    if (result.kind === 'access_denied') {
+      logger.warn(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId,
+          source,
+          resultKind: result.kind,
+        },
+        'Submission import finished with access_denied',
+      );
+      await this.bot.api.sendMessageToUser(
+        user.maxUserId,
+        'Эта заявка принадлежит другому пользователю и недоступна.',
+      );
+      if (sendHomeOnFailure) {
+        await this.sendHomeScreen(user.maxUserId);
+      }
+      return null;
+    }
+
+    if (result.kind === 'incomplete') {
+      logger.warn(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId,
+          source,
+          resultKind: result.kind,
+        },
+        'Submission import finished with incomplete',
+      );
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
+      if (sendHomeOnFailure) {
+        await this.sendHomeScreen(user.maxUserId);
+      }
+      return null;
+    }
+
+    logger.info(
+      {
+        userId: user.id,
+        maxUserId: user.maxUserId,
+        submissionId,
+        source,
+        resultKind: result.kind,
+      },
+      'Submission import finished successfully',
+    );
+
+    if (!user.verified) {
+      await repository.setUserVerified(user.id);
+      await this.bot.api.sendMessageToUser(user.maxUserId, '✅ Верифицированный пользователь');
+    }
+
+    await repository.updateUserProfileFromExternal(user.id, result.data.userFullname, result.data.orgName);
+
+    return this.toImportedSubmissionDraft(result.data);
+  }
+
   private async handleStart(
     user: BotUser,
     payload: string | undefined,
@@ -653,12 +827,26 @@ export class MaxBotService {
       }
     }
 
+    const offer = await repository.getCurrentOffer();
     if (submissionId) {
+      if (offer && user.verified && user.acceptedOfferVersion !== offer.version) {
+        const pendingDraft = await this.loadSubmissionDraftForUser(user, submissionId, 'deep_link');
+        if (!pendingDraft) {
+          return;
+        }
+
+        await repository.setSession(user.id, 'idle', {
+          pendingSubmissionId: submissionId,
+          pendingImportDraft: pendingDraft,
+        });
+        await this.sendOfferForAcceptance(user.maxUserId, offer.version, offer.filePath);
+        return;
+      }
+
       await this.runSubmissionImport(user, submissionId, 'deep_link');
       return;
     }
 
-    const offer = await repository.getCurrentOffer();
     if (offer && user.verified && user.acceptedOfferVersion !== offer.version) {
       await repository.setSession(user.id, 'idle', {});
       await this.sendOfferForAcceptance(user.maxUserId, offer.version, offer.filePath);
@@ -712,6 +900,20 @@ export class MaxBotService {
     await this.bot.api.sendMessageToUser(user.maxUserId, 'Оферта успешно принята.');
 
     const session = await repository.getSession(user.id);
+    const pendingImportDraftRaw = session.data.pendingImportDraft;
+    if (this.isImportedSubmissionDraft(pendingImportDraftRaw)) {
+      logger.info(
+        {
+          userId: user.id,
+          maxUserId: user.maxUserId,
+          submissionId: pendingImportDraftRaw.submissionId ?? null,
+        },
+        'Resuming postponed imported draft after offer acceptance',
+      );
+      await this.sendImportConfirmation(user, pendingImportDraftRaw);
+      return;
+    }
+
     const pendingSubmissionIdRaw = session.data.pendingSubmissionId;
     const pendingSubmissionId =
       typeof pendingSubmissionIdRaw === 'string'
@@ -1429,116 +1631,12 @@ export class MaxBotService {
     submissionId: string,
     source: 'deep_link' | 'offer_resume' | 'manual_input',
   ): Promise<void> {
-    logger.info(
-      {
-        userId: user.id,
-        maxUserId: user.maxUserId,
-        submissionId,
-        source,
-      },
-      'Submission import started',
-    );
-
-    const result = await externalSubmissionService.loadSubmission(submissionId, user.maxUserId);
-
-    if (result.kind === 'not_found') {
-      logger.warn(
-        {
-          userId: user.id,
-          maxUserId: user.maxUserId,
-          submissionId,
-          source,
-          resultKind: result.kind,
-        },
-        'Submission import finished with not_found',
-      );
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Заявка не найдена или больше недоступна.');
-      await this.sendHomeScreen(user.maxUserId);
+    const draft = await this.loadSubmissionDraftForUser(user, submissionId, source);
+    if (!draft) {
       return;
     }
 
-    if (result.kind === 'access_denied') {
-      logger.warn(
-        {
-          userId: user.id,
-          maxUserId: user.maxUserId,
-          submissionId,
-          source,
-          resultKind: result.kind,
-        },
-        'Submission import finished with access_denied',
-      );
-      await this.bot.api.sendMessageToUser(
-        user.maxUserId,
-        'Эта заявка принадлежит другому пользователю и недоступна.',
-      );
-      await this.sendHomeScreen(user.maxUserId);
-      return;
-    }
-
-    if (result.kind === 'incomplete') {
-      logger.warn(
-        {
-          userId: user.id,
-          maxUserId: user.maxUserId,
-          submissionId,
-          source,
-          resultKind: result.kind,
-        },
-        'Submission import finished with incomplete',
-      );
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Не удалось распознать все обязательные поля. Попробуйте еще раз.');
-      await this.sendHomeScreen(user.maxUserId);
-      return;
-    }
-
-    logger.info(
-      {
-        userId: user.id,
-        maxUserId: user.maxUserId,
-        submissionId,
-        source,
-        resultKind: result.kind,
-      },
-      'Submission import finished successfully',
-    );
-
-    if (!user.verified) {
-      await repository.setUserVerified(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, '✅ Верифицированный пользователь');
-    }
-
-    await repository.updateUserProfileFromExternal(user.id, result.data.userFullname, result.data.orgName);
-
-    const draft: Partial<ActDraft> = {
-      source: 'submission',
-      submissionId: result.data.submissionId,
-      address: result.data.address,
-      waterType: result.data.waterType,
-      meterModel: result.data.meterModel,
-      serialNumber: result.data.serialNumber,
-      currentReading: result.data.currentReading,
-    };
-
-    await repository.setSession(user.id, 'import_confirmation', { draft });
-
-    const lines = [
-      'Импортированные данные:',
-      `Адрес: ${result.data.address}`,
-      `Тип воды: ${result.data.waterType}`,
-      `Модель/тип счетчика: ${result.data.meterModel}`,
-      `Серийный номер: ${result.data.serialNumber}`,
-      `Текущее показание: ${result.data.currentReading}`,
-    ];
-
-    await this.bot.api.sendMessageToUser(user.maxUserId, lines.join('\n'), {
-      attachments: [
-        makeKeyboard([
-          [{ text: '✅ Подтвердить', payload: CB.IMPORT_CONFIRM, intent: 'positive' }],
-          [{ text: '❌ Отменить', payload: CB.CANCEL, intent: 'negative' }],
-        ]),
-      ],
-    });
+    await this.sendImportConfirmation(user, draft);
   }
 
   private async showHistory(user: BotUser): Promise<void> {
