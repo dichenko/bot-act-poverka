@@ -653,27 +653,15 @@ export class MaxBotService {
       }
     }
 
-    const offer = await repository.getCurrentOffer();
-    if (offer && user.verified && user.acceptedOfferVersion !== offer.version) {
-      if (submissionId) {
-        logger.info(
-          {
-            userId: user.id,
-            maxUserId: user.maxUserId,
-            source,
-            submissionId,
-            offerVersion: offer.version,
-          },
-          'Deep-link import postponed until offer acceptance',
-        );
-      }
-      await repository.setSession(user.id, 'idle', submissionId ? { pendingSubmissionId: submissionId } : {});
-      await this.sendOfferForAcceptance(user.maxUserId, offer.version, offer.filePath);
+    if (submissionId) {
+      await this.runSubmissionImport(user, submissionId, 'deep_link');
       return;
     }
 
-    if (submissionId) {
-      await this.runSubmissionImport(user, submissionId, 'deep_link');
+    const offer = await repository.getCurrentOffer();
+    if (offer && user.verified && user.acceptedOfferVersion !== offer.version) {
+      await repository.setSession(user.id, 'idle', {});
+      await this.sendOfferForAcceptance(user.maxUserId, offer.version, offer.filePath);
       return;
     }
 
