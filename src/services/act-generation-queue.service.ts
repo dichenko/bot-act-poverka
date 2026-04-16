@@ -29,6 +29,7 @@ export class ActGenerationQueueService {
       `Баланс: ${formatRub(user.balanceRub)}`,
       `Всего создано актов: ${user.actsCount}`,
       `Цена акта: ${formatRub(price)}`,
+      'Создание акта: только по диплинку из внешней системы',
     ].join('\n');
 
     await this.api.sendMessageToUser(maxUserId, text, {

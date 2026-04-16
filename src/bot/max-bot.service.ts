@@ -35,6 +35,10 @@ type IncomingIdentity = {
   username: string | null;
 };
 
+type AccessResolveOptions = {
+  startPayload?: string;
+};
+
 type PastedSubmissionDraft = Pick<
   ActDraft,
   'source' | 'address' | 'waterType' | 'meterModel' | 'serialNumber' | 'currentReading'
@@ -198,18 +202,113 @@ export class MaxBotService {
     };
   }
 
-  private async syncUser(ctx: Context): Promise<BotUser | null> {
+  private async resolveUserAccess(ctx: Context, options: AccessResolveOptions = {}): Promise<BotUser | null> {
     const identity = this.parseIdentity(ctx);
     if (!identity) {
       return null;
     }
 
-    return repository.upsertUserByMaxId({
+    if (isAdmin(identity.maxUserId)) {
+      return repository.upsertUserByMaxId({
+        maxUserId: identity.maxUserId,
+        firstName: identity.name,
+        username: identity.username,
+        lastName: null,
+      });
+    }
+
+    const existing = await repository.touchUserByMaxId({
       maxUserId: identity.maxUserId,
       firstName: identity.name,
       username: identity.username,
       lastName: null,
     });
+    if (existing) {
+      return existing;
+    }
+
+    const submissionId = this.extractSubmissionId(options.startPayload);
+    if (submissionId) {
+      const trusted = await externalSubmissionService.loadSubmission(submissionId, identity.maxUserId);
+      if (trusted.kind === 'ok' || trusted.kind === 'incomplete') {
+        const user = await repository.upsertUserByMaxId({
+          maxUserId: identity.maxUserId,
+          firstName: identity.name,
+          username: identity.username,
+          lastName: null,
+          verified: true,
+        });
+
+        if (trusted.kind === 'ok') {
+          await repository.updateUserProfileFromExternal(user.id, trusted.data.userFullname, trusted.data.orgName);
+        }
+
+        logger.info(
+          {
+            maxUserId: identity.maxUserId,
+            submissionId,
+            probeResult: trusted.kind,
+            userId: user.id,
+          },
+          'User admitted via trusted deep-link',
+        );
+
+        return user;
+      }
+
+      logger.warn(
+        {
+          maxUserId: identity.maxUserId,
+          submissionId,
+          probeResult: trusted.kind,
+        },
+        'Unknown user denied: deep-link trust check failed',
+      );
+    }
+
+    await this.sendUnknownUserMessage(identity.maxUserId);
+    return null;
+  }
+
+  private supportContactText(maxUserId: number): string {
+    return [
+      'Напишите в поддержку : <a href="max://user/91634403">Метрология ГК</a><br>',
+      'Или по телефону +7(937)-033-22-22<br>',
+      `Ваш MaxID: ${this.escapeHtml(String(maxUserId))}`,
+    ].join('\n');
+  }
+
+  private async sendUnknownUserMessage(maxUserId: number): Promise<void> {
+    const text = ['Вас нет в базе. Обратитесь в поддержку.', '', this.supportContactText(maxUserId)].join('\n');
+    await this.bot.api.sendMessageToUser(maxUserId, text, {
+      format: 'html',
+    });
+  }
+
+  private isDeepLinkOnlyState(state: UserSession['state']): boolean {
+    return (
+      state === 'manual_address' ||
+      state === 'manual_water_type' ||
+      state === 'manual_meter_model' ||
+      state === 'manual_serial' ||
+      state === 'manual_reading' ||
+      state === 'manual_check_date' ||
+      state === 'manual_interval' ||
+      state === 'manual_result' ||
+      state === 'manual_confirm' ||
+      state === 'import_wait_submission_id'
+    );
+  }
+
+  private async enforceDeepLinkOnlyState(user: BotUser, session: UserSession): Promise<boolean> {
+    if (!this.isDeepLinkOnlyState(session.state)) {
+      return true;
+    }
+
+    await repository.clearSession(user.id);
+    await this.bot.api.sendMessageToUser(user.maxUserId, 'Создание акта доступно только по диплинку из внешней системы.');
+    await this.sendHomeScreen(user.maxUserId);
+    return false;
   }
 
   private parseText(ctx: Context): string {
@@ -388,7 +487,9 @@ export class MaxBotService {
   }
 
   private async onBotStarted(ctx: Context): Promise<void> {
-    const user = await this.syncUser(ctx);
+    const user = await this.resolveUserAccess(ctx, {
+      startPayload: ctx.startPayload ?? undefined,
+    });
     if (!user) {
       return;
     }
@@ -402,13 +503,16 @@ export class MaxBotService {
   }
 
   private async onMessage(ctx: Context): Promise<void> {
-    const user = await this.syncUser(ctx);
+    const text = this.parseText(ctx);
+    const command = this.parseCommand(text);
+    const startPayload = command?.command === '/start' ? command.args[0] : undefined;
+
+    const user = await this.resolveUserAccess(ctx, {
+      startPayload,
+    });
     if (!user) {
       return;
     }
-
-    const text = this.parseText(ctx);
-    const command = this.parseCommand(text);
 
     if (isAdmin(user.maxUserId)) {
       await this.handleAdminMessage(user, text, command, ctx);
@@ -442,17 +546,17 @@ export class MaxBotService {
   }
 
   private async onCallback(ctx: Context): Promise<void> {
-    const user = await this.syncUser(ctx);
-    if (!user) {
-      return;
-    }
-
     const payload = ctx.callback?.payload ?? '';
     if (!payload) {
       return;
     }
 
     await this.answerCallbackSafe(ctx);
+
+    const user = await this.resolveUserAccess(ctx);
+    if (!user) {
+      return;
+    }
 
     if (payload === CB.ACCEPT_OFFER) {
       await this.acceptOffer(user);
@@ -658,6 +762,7 @@ export class MaxBotService {
       `Баланс: ${formatRub(user.balanceRub)}`,
       `Всего создано актов: ${user.actsCount}`,
       `Цена акта: ${formatRub(price)}`,
+      'Создание акта: только по диплинку из внешней системы',
     ].join('\n');
 
     await this.bot.api.sendMessageToUser(maxUserId, text, {
@@ -682,11 +787,7 @@ export class MaxBotService {
   }
 
   private async sendHelpContact(maxUserId: number): Promise<void> {
-    const text = [
-      'Напишите в поддержку : <a href="max://user/91634403">Метрология ГК</a><br>',
-      'Или по телефону +7(937)-033-22-22<br>',
-      `Ваш MaxID: ${this.escapeHtml(String(maxUserId))}`,
-    ].join('\n');
+    const text = this.supportContactText(maxUserId);
 
     await this.bot.api.sendMessageToUser(maxUserId, text, {
       format: 'html',
@@ -694,6 +795,10 @@ export class MaxBotService {
   }
 
   private async handleSessionText(user: BotUser, text: string, session: UserSession): Promise<void> {
+    if (!(await this.enforceDeepLinkOnlyState(user, session))) {
+      return;
+    }
+
     switch (session.state) {
       case 'manual_address': {
         if (!text) {
@@ -901,6 +1006,10 @@ export class MaxBotService {
     }
   }
   private async handleCallbackByPayload(user: BotUser, payload: string, session: UserSession): Promise<void> {
+    if (!(await this.enforceDeepLinkOnlyState(user, session))) {
+      return;
+    }
+
     if (payload === CB.DATE_TODAY) {
       if (session.state !== 'manual_check_date' && session.state !== 'import_check_date') {
         return;
@@ -917,22 +1026,14 @@ export class MaxBotService {
     }
 
     if (payload === CB.MENU_MANUAL) {
-      await repository.setSession(user.id, 'manual_address', {
-        draft: {
-          source: 'manual',
-        },
-      });
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Введите адрес:', {
-        attachments: [cancelKeyboard()],
-      });
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Создание акта доступно только по диплинку из внешней системы.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 
     if (payload === CB.MENU_IMPORT) {
-      await repository.setSession(user.id, 'import_wait_submission_id', {});
-      await this.bot.api.sendMessageToUser(user.maxUserId, 'Вставьте данные из бота Отчет', {
-        attachments: [cancelKeyboard()],
-      });
+      await this.bot.api.sendMessageToUser(user.maxUserId, 'Создание акта доступно только по диплинку из внешней системы.');
+      await this.sendHomeScreen(user.maxUserId);
       return;
     }
 

@@ -92,22 +92,47 @@ export class Repository {
     username?: string | null;
     firstName?: string | null;
     lastName?: string | null;
+    verified?: boolean;
   }): Promise<BotUser> {
+    const verified = input.verified === true;
     const { rows } = await pool.query(
       `
-      INSERT INTO users(max_user_id, username, first_name, last_name)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO users(max_user_id, username, first_name, last_name, verified)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (max_user_id) DO UPDATE SET
         username = COALESCE(EXCLUDED.username, users.username),
         first_name = COALESCE(EXCLUDED.first_name, users.first_name),
         last_name = COALESCE(EXCLUDED.last_name, users.last_name),
+        verified = users.verified OR EXCLUDED.verified,
         updated_at = NOW()
+      RETURNING *
+      `,
+      [input.maxUserId, input.username ?? null, input.firstName ?? null, input.lastName ?? null, verified],
+    );
+
+    return toBotUser(rows[0]);
+  }
+
+  async touchUserByMaxId(input: {
+    maxUserId: number;
+    username?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+  }): Promise<BotUser | null> {
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET username = COALESCE($2, users.username),
+          first_name = COALESCE($3, users.first_name),
+          last_name = COALESCE($4, users.last_name),
+          updated_at = NOW()
+      WHERE max_user_id = $1
       RETURNING *
       `,
       [input.maxUserId, input.username ?? null, input.firstName ?? null, input.lastName ?? null],
     );
 
-    return toBotUser(rows[0]);
+    return rows[0] ? toBotUser(rows[0]) : null;
   }
 
   async getUserByMaxId(maxUserId: number): Promise<BotUser | null> {
