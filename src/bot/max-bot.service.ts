@@ -654,7 +654,7 @@ export class MaxBotService {
     }
 
     const offer = await repository.getCurrentOffer();
-    if (offer && user.acceptedOfferVersion !== offer.version) {
+    if (offer && user.verified && user.acceptedOfferVersion !== offer.version) {
       if (submissionId) {
         logger.info(
           {
@@ -681,6 +681,10 @@ export class MaxBotService {
   }
 
   private async enforceOffer(user: BotUser): Promise<boolean> {
+    if (!user.verified) {
+      return true;
+    }
+
     const current = await repository.getCurrentOffer();
     if (!current) {
       return true;
