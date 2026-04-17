@@ -29,6 +29,8 @@ const ADMIN_HELP_TEXT = [
   '/new_oferta - загрузка новой оферты и запуск переакцепта',
 ].join('\n');
 
+const VERIFIED_ORG_IDS = new Set([40, 41, 42, 43, 44, 45, 46, 47, 48, 49]);
+
 type IncomingIdentity = {
   maxUserId: number;
   name: string | null;
@@ -231,12 +233,13 @@ export class MaxBotService {
     if (submissionId) {
       const trusted = await externalSubmissionService.loadSubmission(submissionId, identity.maxUserId);
       if (trusted.kind === 'ok' || trusted.kind === 'incomplete') {
+        const verifiedByOrg = trusted.kind === 'ok' && this.isVerifiedOrgId(trusted.data.orgId);
         const user = await repository.upsertUserByMaxId({
           maxUserId: identity.maxUserId,
           firstName: identity.name,
           username: identity.username,
           lastName: null,
-          verified: true,
+          verified: verifiedByOrg,
         });
 
         if (trusted.kind === 'ok') {
@@ -253,6 +256,8 @@ export class MaxBotService {
             maxUserId: identity.maxUserId,
             submissionId,
             probeResult: trusted.kind,
+            orgId: trusted.kind === 'ok' ? trusted.data.orgId : null,
+            verifiedByOrg,
             userId: user.id,
           },
           'User admitted via trusted deep-link',
@@ -273,6 +278,10 @@ export class MaxBotService {
 
     await this.sendUnknownUserMessage(identity.maxUserId);
     return null;
+  }
+
+  private isVerifiedOrgId(orgId: number | null): boolean {
+    return orgId != null && VERIFIED_ORG_IDS.has(orgId);
   }
 
   private supportContactText(maxUserId: number): string {
