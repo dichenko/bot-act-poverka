@@ -36,6 +36,20 @@
       - ./storage:/app/storage
       - ./template:/app/template:ro
 
+  cleanup-worker:
+    build: .
+    container_name: max-act-cleanup-worker
+    restart: unless-stopped
+    command: sh -c "node dist/worker/storage-cleanup.worker.js"
+    env_file:
+      - .env
+    environment:
+      TZ: ${APP_TIMEZONE:-Europe/Moscow}
+    networks:
+      - app-net
+    volumes:
+      - ./storage:/app/storage
+
   postgres:
     image: postgres:16-alpine
     container_name: max-act-postgres

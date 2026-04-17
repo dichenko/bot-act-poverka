@@ -31,6 +31,9 @@ const envSchema = z.object({
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
   LIBREOFFICE_BIN: z.string().default('soffice'),
   APP_TIMEZONE: z.string().default('Europe/Moscow'),
+  CLEANUP_STORAGE_ROOT: z.string().default(path.resolve(process.cwd(), 'storage')),
+  CLEANUP_RETENTION_DAYS: z.coerce.number().int().positive().default(90),
+  CLEANUP_RUN_HOUR: z.coerce.number().int().min(0).max(23).default(3),
 
   YOOKASSA_SHOP_ID: z.string().min(1),
   YOOKASSA_SECRET_KEY: z.string().min(1),

@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "worker": "node dist/worker/index.js",
     "dev:worker": "tsx watch src/worker/index.ts",
+    "worker:cleanup": "node dist/worker/storage-cleanup.worker.js",
+    "dev:worker:cleanup": "tsx watch src/worker/storage-cleanup.worker.ts",
     "test:act:once": "tsx src/scripts/test-act-generation.ts",
     "test:act:once:prod": "node dist/scripts/test-act-generation.js",
     "purge:unverified": "tsx src/scripts/purge-unverified-users.ts",
