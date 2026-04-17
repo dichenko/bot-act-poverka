@@ -222,12 +222,7 @@ export class MaxBotService {
       });
     }
 
-    const existing = await repository.touchUserByMaxId({
-      maxUserId: identity.maxUserId,
-      firstName: identity.name,
-      username: identity.username,
-      lastName: null,
-    });
+    const existing = await repository.getUserByMaxId(identity.maxUserId);
     if (existing) {
       return existing;
     }
@@ -245,7 +240,12 @@ export class MaxBotService {
         });
 
         if (trusted.kind === 'ok') {
-          await repository.updateUserProfileFromExternal(user.id, trusted.data.userFullname, trusted.data.orgName);
+          await repository.applyInitialUserProfileFromExternal(
+            user.id,
+            trusted.data.userFullname,
+            trusted.data.orgName,
+            trusted.data.orgId,
+          );
         }
 
         logger.info(
@@ -773,13 +773,6 @@ export class MaxBotService {
       },
       'Submission import finished successfully',
     );
-
-    if (!user.verified) {
-      await repository.setUserVerified(user.id);
-      await this.bot.api.sendMessageToUser(user.maxUserId, '✅ Верифицированный пользователь');
-    }
-
-    await repository.updateUserProfileFromExternal(user.id, result.data.userFullname, result.data.orgName);
 
     return this.toImportedSubmissionDraft(result.data);
   }

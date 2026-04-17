@@ -6,6 +6,24 @@ import { toDbDateStringOrNull } from '../utils/dates';
 type DB = PoolClient | typeof pool;
 
 type PriceUserType = 'ordinary' | 'verified';
+const DEFAULT_CONTACT_NUMBER_1 = '+7(495)123-30-70';
+const SPECIAL_CONTACT_NUMBER_1 = '+7(8422)70-21-70';
+const SPECIAL_CONTACT_NUMBER_2 = '+7(8422)70-13-00';
+const SPECIAL_ORG_IDS = new Set([40, 41, 42, 43, 44, 45, 46, 47, 48, 49]);
+
+const resolveContactsByOrgId = (orgId: number | null): { contactNumber1: string; contactNumber2: string } => {
+  if (orgId != null && SPECIAL_ORG_IDS.has(orgId)) {
+    return {
+      contactNumber1: SPECIAL_CONTACT_NUMBER_1,
+      contactNumber2: SPECIAL_CONTACT_NUMBER_2,
+    };
+  }
+
+  return {
+    contactNumber1: DEFAULT_CONTACT_NUMBER_1,
+    contactNumber2: '',
+  };
+};
 
 const toBotUser = (row: QueryResultRow): BotUser => ({
   id: Number(row.id),
@@ -15,7 +33,8 @@ const toBotUser = (row: QueryResultRow): BotUser => ({
   lastName: row.last_name,
   userFullname: row.user_fullname,
   orgName: row.org_name,
-  contactNumber1: row.contact_number_1 ?? '+7 (495) 123-30-70',
+  orgId: row.org_id == null ? null : Number(row.org_id),
+  contactNumber1: row.contact_number_1 ?? DEFAULT_CONTACT_NUMBER_1,
   contactNumber2: row.contact_number_2 ?? '',
   verified: row.verified,
   acceptedOfferVersion: row.accepted_offer_version,
@@ -113,28 +132,6 @@ export class Repository {
     return toBotUser(rows[0]);
   }
 
-  async touchUserByMaxId(input: {
-    maxUserId: number;
-    username?: string | null;
-    firstName?: string | null;
-    lastName?: string | null;
-  }): Promise<BotUser | null> {
-    const { rows } = await pool.query(
-      `
-      UPDATE users
-      SET username = COALESCE($2, users.username),
-          first_name = COALESCE($3, users.first_name),
-          last_name = COALESCE($4, users.last_name),
-          updated_at = NOW()
-      WHERE max_user_id = $1
-      RETURNING *
-      `,
-      [input.maxUserId, input.username ?? null, input.firstName ?? null, input.lastName ?? null],
-    );
-
-    return rows[0] ? toBotUser(rows[0]) : null;
-  }
-
   async getUserByMaxId(maxUserId: number): Promise<BotUser | null> {
     const { rows } = await pool.query('SELECT * FROM users WHERE max_user_id = $1 LIMIT 1', [maxUserId]);
     return rows[0] ? toBotUser(rows[0]) : null;
@@ -149,16 +146,25 @@ export class Repository {
     await pool.query('UPDATE users SET verified = TRUE, updated_at = NOW() WHERE id = $1', [userId]);
   }
 
-  async updateUserProfileFromExternal(userId: number, userFullname: string | null, orgName: string | null): Promise<void> {
+  async applyInitialUserProfileFromExternal(
+    userId: number,
+    userFullname: string | null,
+    orgName: string | null,
+    orgId: number | null,
+  ): Promise<void> {
+    const contacts = resolveContactsByOrgId(orgId);
     await pool.query(
       `
       UPDATE users
       SET user_fullname = COALESCE($2, user_fullname),
           org_name = COALESCE($3, org_name),
+          org_id = COALESCE($4, org_id),
+          contact_number_1 = $5,
+          contact_number_2 = $6,
           updated_at = NOW()
       WHERE id = $1
       `,
-      [userId, userFullname, orgName],
+      [userId, userFullname, orgName, orgId, contacts.contactNumber1, contacts.contactNumber2],
     );
   }
 

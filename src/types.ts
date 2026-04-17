@@ -23,6 +23,7 @@ export type BotUser = {
   lastName: string | null;
   userFullname: string | null;
   orgName: string | null;
+  orgId: number | null;
   contactNumber1: string;
   contactNumber2: string;
   verified: boolean;
@@ -87,6 +88,7 @@ export type SubmissionImport = {
   meterModel: string;
   userFullname: string | null;
   orgName: string | null;
+  orgId: number | null;
 };
 
 export type ActGenerationJob = {

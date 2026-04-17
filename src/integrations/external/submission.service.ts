@@ -18,6 +18,26 @@ const pickFirstString = (source: Record<string, unknown>, keys: string[]): strin
   return null;
 };
 
+const pickFirstNullableInt = (source: Record<string, unknown>, keys: string[]): number | null => {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.trunc(value);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) {
+        continue;
+      }
+      const parsed = Number(trimmed);
+      if (Number.isFinite(parsed)) {
+        return Math.trunc(parsed);
+      }
+    }
+  }
+  return null;
+};
+
 export class ExternalSubmissionService {
   private usersLookupColumnCache: 'user_id' | 'id' | null | undefined;
 
@@ -133,6 +153,7 @@ export class ExternalSubmissionService {
 
     const userFullname = pickFirstString(data, ['full_name', 'fullname', 'user_fullname', 'name']);
     const orgName = pickFirstString(data, ['org_name', 'organization_name', 'company_name']);
+    const orgId = pickFirstNullableInt(data, ['org_id']);
 
     return {
       kind: 'ok',
@@ -146,6 +167,7 @@ export class ExternalSubmissionService {
         meterModel,
         userFullname,
         orgName,
+        orgId,
       },
     };
   }
