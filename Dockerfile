@@ -15,10 +15,21 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache libreoffice ttf-dejavu
+RUN apk add --no-cache ca-certificates libreoffice ttf-dejavu
 
 COPY package*.json ./
 RUN npm ci --omit=dev
+
+COPY certs/russian-trusted/*.crt /usr/local/share/ca-certificates/
+RUN update-ca-certificates \
+    && { \
+         for cert in /usr/local/share/ca-certificates/russian_trusted_*.crt; do \
+           cat "$cert"; \
+           printf '\n'; \
+         done; \
+       } > /etc/ssl/certs/russian-trusted-ca-bundle.pem
+
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/russian-trusted-ca-bundle.pem
 
 COPY --from=base /app/dist ./dist
 COPY --from=base /app/migrations ./migrations

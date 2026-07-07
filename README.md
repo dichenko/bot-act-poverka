@@ -17,7 +17,7 @@ Production-oriented MAX messenger bot in TypeScript for generating water meter i
 
 ## Important MAX SDK webhook note
 
-Current `@maxhub/max-bot-api` (v0.2.2) publicly exposes polling startup (`bot.start()`).
+Current `@maxhub/max-bot-api` publicly exposes polling startup (`bot.start()`).
 To keep webhook mode as required, this project receives webhook updates over HTTP and forwards them into SDK internals via `bot.handleUpdate(...)`.
 
 ## Main features
@@ -111,7 +111,8 @@ Health endpoints:
 ## VPS deployment with Docker Compose
 
 ```bash
-docker compose --env-file .env up -d --build
+git pull --ff-only
+docker compose up -d --build
 ```
 
 Services:
@@ -119,6 +120,10 @@ Services:
 - `worker` (polling queued act-generation jobs)
 - `postgres` (private internal network)
 - `pgadmin` (proxied through HTTPS subdomain, image tag `dpage/pgadmin4:9.13`)
+
+MAX API requests use `https://platform-api2.max.ru`.
+
+The Docker image includes the public Russian Trusted Root CA and Russian Trusted Sub CA certificates from Gosuslugi under `certs/russian-trusted/`. They are installed into the container trust store during build and passed to Node.js through `NODE_EXTRA_CA_CERTS`.
 
 ## Security notes
 

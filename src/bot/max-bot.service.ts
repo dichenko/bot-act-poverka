@@ -6,6 +6,7 @@ import { repository } from '../db/repository';
 import { externalSubmissionService } from '../integrations/external/submission.service';
 import { yooKassaClient, YooWebhookEvent } from '../integrations/yookassa/client';
 import { logger } from '../logger';
+import { MAX_API_BASE_URL } from '../config/max-api';
 import { validateDraft } from '../services/act.service';
 import type { ActDraft, BotUser, SubmissionImport, UserSession } from '../types';
 import { computeValidUntil, isFutureDate, parseDateOrNull, toDateView, todayDateString } from '../utils/dates';
@@ -55,7 +56,11 @@ export class MaxBotService {
   readonly bot: Bot;
 
   constructor() {
-    this.bot = new Bot(env.BOT_TOKEN);
+    this.bot = new Bot(env.BOT_TOKEN, {
+      clientOptions: {
+        baseUrl: MAX_API_BASE_URL,
+      },
+    });
 
     this.bot.on('bot_started', async (ctx) => {
       await this.wrapHandler(ctx, () => this.onBotStarted(ctx));
@@ -79,6 +84,8 @@ export class MaxBotService {
 
   async init(): Promise<void> {
     await repository.ensurePrices();
+
+    logger.info({ maxApiBaseUrl: MAX_API_BASE_URL }, 'MAX API client configured');
 
     await this.bot.api.setMyCommands([
       { name: 'start', description: 'Открыть главное меню' },
@@ -1995,7 +2002,7 @@ export class MaxBotService {
 
     const withToken = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${env.BOT_TOKEN}`,
+        Authorization: env.BOT_TOKEN,
       },
     });
 

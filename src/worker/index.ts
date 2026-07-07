@@ -1,6 +1,7 @@
 ﻿import { Bot } from '@maxhub/max-bot-api';
 import { env } from '../config/env';
 import { logger } from '../logger';
+import { MAX_API_BASE_URL } from '../config/max-api';
 import { pool, externalPool } from '../db/pool';
 import { ActGenerationQueueService } from '../services/act-generation-queue.service';
 import { ensureDir } from '../utils/fs';
@@ -13,7 +14,13 @@ const run = async (): Promise<void> => {
   await ensureDir(env.ACT_STORAGE_DIR);
   await ensureDir(env.ACT_XLSX_STORAGE_DIR);
 
-  const bot = new Bot(env.BOT_TOKEN);
+  logger.info({ maxApiBaseUrl: MAX_API_BASE_URL }, 'MAX API client configured');
+
+  const bot = new Bot(env.BOT_TOKEN, {
+    clientOptions: {
+      baseUrl: MAX_API_BASE_URL,
+    },
+  });
   const queue = new ActGenerationQueueService(bot.api);
 
   logger.info('Act generation worker started');

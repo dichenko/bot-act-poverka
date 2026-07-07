@@ -31,7 +31,7 @@
   },
   "homepage": "https://github.com/dichenko/bot-act-poverka#readme",
   "dependencies": {
-    "@maxhub/max-bot-api": "^0.2.2",
+    "@maxhub/max-bot-api": "^0.2.4",
     "date-fns": "^4.1.0",
     "dotenv": "^17.4.1",
     "exceljs": "^4.4.0",
