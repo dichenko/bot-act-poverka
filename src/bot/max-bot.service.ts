@@ -28,6 +28,9 @@ const ADMIN_HELP_TEXT = [
   '/addbalance {max_user_id} {amount_rub} - пополнение баланса вручную',
   '/broadcast {text} - рассылка текста всем пользователям',
   '/new_oferta - загрузка новой оферты и запуск переакцепта',
+  '',
+  `Новый адрес MAX API: ${MAX_API_BASE_URL} - в коде уже установлен новый адрес.`,
+  'Сертификаты Минцифры установлены: Russian Trusted Root CA и Russian Trusted Sub CA.',
 ].join('\n');
 
 const VERIFIED_ORG_IDS = new Set([40, 41, 42, 43, 44, 45, 46, 47, 48, 49]);
